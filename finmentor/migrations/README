@@ -1,0 +1,13 @@
+Alembic migration environment.
+
+`env.py` takes its URL from `app.core.config.settings.database_url` and its
+target metadata from `app.db.base:Base.metadata` (with `app.models` imported so
+every table is registered), so the CLI and the running app can never disagree.
+
+    alembic revision --autogenerate -m "what changed"   # review the file it writes
+    alembic upgrade head
+    alembic downgrade -1
+    alembic check                                       # models vs. database drift
+
+Tests can drive this environment against their own connection by setting
+`config.attributes["connection"]` — see tests/unit/test_migrations.py.

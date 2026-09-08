@@ -1,0 +1,39 @@
+"""Equities provider (Alpha Vantage TIME_SERIES_DAILY).
+
+Ported from legacy data/market_data.fetch_stock_daily. On any failure the
+caller (app.services.market_engine) falls back to MockMarketProvider.
+# >>> finmentor-stub <<<
+"""
+from __future__ import annotations
+
+import requests
+
+from app.core.config import settings
+from app.market.base import MarketDataProvider, PricePoint
+
+
+class AlphaVantageProvider(MarketDataProvider):
+    name = "alpha_vantage"
+    _URL = "https://www.alphavantage.co/query"
+
+    def supports(self, symbol: str) -> bool:
+        return symbol.isalpha() and symbol.isupper()
+
+    def get_daily_series(self, symbol: str, days: int = 30) -> list[PricePoint]:
+        params = {
+            "function": "TIME_SERIES_DAILY",
+            "symbol": symbol,
+            "apikey": settings.alpha_vantage_api_key,
+            "outputsize": "compact",
+        }
+        resp = requests.get(self._URL, params=params, timeout=8)
+        resp.raise_for_status()
+        series = resp.json().get("Time Series (Daily)")
+        if not series:
+            raise ValueError(f"unexpected Alpha Vantage response for {symbol}")
+        points = [
+            PricePoint(date=d, close=float(v["4. close"]), volume=float(v["5. volume"]))
+            for d, v in series.items()
+        ]
+        points.sort(key=lambda p: p.date)
+        return points[-days:]

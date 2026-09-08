@@ -1,0 +1,23 @@
+# Local dev infra only. The app itself runs with `uvicorn app.main:app` and
+# `python -m app.bot.main`. DEMO_MODE=true lets you skip this entirely.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: finmentor
+      POSTGRES_PASSWORD: finmentor
+      POSTGRES_DB: finmentor
+    ports: ["5432:5432"]
+    volumes: ["finmentor_pg:/var/lib/postgresql/data"]
+    healthcheck:                       # so `alembic upgrade head` can follow straight after
+      test: ["CMD-SHELL", "pg_isready -U finmentor -d finmentor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+volumes:
+  finmentor_pg:

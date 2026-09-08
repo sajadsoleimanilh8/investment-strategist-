@@ -1,0 +1,7 @@
+# secrets — .env is created from .env.example and never committed (spec section 26)
+.env
+
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
