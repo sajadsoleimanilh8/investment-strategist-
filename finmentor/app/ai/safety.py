@@ -134,6 +134,13 @@ def numbers_in_context(context: Any) -> list[float]:
     elif isinstance(context, (int, float)):
         numbers.append(float(context))
         numbers.append(float(context) * 100)      # a stored rate quoted as a percent
+        # The magnitude, because `numbers_in_text` reads no sign: "$-36,000,000"
+        # comes back as 36,000,000. Without this a purchase that overdraws
+        # someone flags its own deterministic rendering as invented, and every
+        # negative figure downgrades an otherwise correct answer. A sign is a
+        # direction, and direction is what the labelled before/after block and
+        # the verdict words are for — grounding is about the magnitude.
+        numbers.append(abs(float(context)))
     elif isinstance(context, str):
         numbers.extend(numbers_in_text(context))
     return numbers

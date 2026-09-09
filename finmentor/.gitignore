@@ -14,3 +14,5 @@ data/ft/
 models/*.gguf
 models/*.bin
 outputs/
+scripts/ft/probe_report.json
+scripts/ft/probe_*.json

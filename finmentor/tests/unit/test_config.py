@@ -61,3 +61,59 @@ def test_secrets_default_to_empty_not_placeholders():
 
 def test_get_settings_is_cached():
     assert get_settings() is get_settings() is settings
+
+
+# --- the local model is a name, not a list ------------------------------
+#
+# The Part-B gate chose stock `llama3.2:3b`, but a fine-tune (`finmentor-3b`)
+# or a bigger stock model has to be one env var away. Nothing in the app may
+# assume which one is loaded.
+
+@pytest.mark.parametrize(
+    "model",
+    ["llama3.2:3b", "qwen2.5:7b", "finmentor-3b", "some/registry:tag-v2"],
+)
+def test_any_model_name_is_accepted(monkeypatch, model):
+    monkeypatch.setenv("LOCAL_LLM_MODEL", model)
+    get_settings.cache_clear()
+    try:
+        assert get_settings().local_llm_model == model
+    finally:
+        get_settings.cache_clear()
+
+
+def test_no_model_name_is_hard_coded_outside_config():
+    """A tag written into a module is a deployment that cannot be retargeted."""
+    import pathlib
+
+    app_dir = pathlib.Path(__file__).resolve().parents[2] / "app"
+    def code_lines(path):
+        """Comments may name a model as an example; code may not depend on one."""
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                yield line.split("  #")[0]
+
+    offenders = [
+        path.relative_to(app_dir).as_posix()
+        for path in app_dir.rglob("*.py")
+        if path.name != "config.py"
+        and any(tag in line for line in code_lines(path)
+                for tag in ("llama3.2:3b", "finmentor-3b"))
+    ]
+    assert offenders == [], f"model tag hard-coded in: {offenders}"
+
+
+def test_the_provider_switch_still_reaches_the_offline_double():
+    """`fake` must keep working whatever the model name says."""
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("LOCAL_LLM_PROVIDER", "fake")
+    monkeypatch.setenv("LOCAL_LLM_MODEL", "finmentor-3b")
+    get_settings.cache_clear()
+    try:
+        from app.ai.local_llm import FakeLocalProvider, get_local_provider
+
+        assert isinstance(get_local_provider(), FakeLocalProvider)
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()

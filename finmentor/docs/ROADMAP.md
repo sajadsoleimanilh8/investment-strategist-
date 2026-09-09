@@ -136,6 +136,26 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
       canned capabilities answer survives as the floor when the model is down.
 - **Done when:** the full Definition-of-Done flow works from Telegram in DEMO_MODE.
 
+## Local model — evaluation, and the fine-tune we did not do  `[x]`
+- [x] 22-probe evaluation set built from **real** engine output for four
+      synthetic people (`scripts/ft/make_probes.py`), graded on seven checks
+      that each name a defect seen live (`scripts/ft/probes.py`)
+- [x] Three defects fixed by changing what the model is *shown*, not by
+      training: the chat snapshot carries the engine's verdict per component
+      and no raw score; what-if / purchase contexts get a labelled
+      `BEFORE … | AFTER …` block ahead of the JSON; `safety` grounds on
+      magnitude so a negative figure no longer flags its own rendering
+- [x] Gate run, 3 passes x 22 probes: **llama3.2:3b 20.0/22 (91%)**,
+      qwen2.5:3b 19.3/22 (88%). `qwen2.5:7b` untested — `ollama pull` blocked
+      from this machine twice (DNS, then a blocked socket).
+- **Decision: no fine-tune.** A stock model clears the bar and the defects a
+  fine-tune targeted are already gone. Fine-tuning is a retrain obligation on
+  every base-model bump; taking that on for defects a better prompt payload
+  removed would be paying rent on nothing. The path to do it later, and what it
+  would plausibly buy, is written up in `scripts/ft/README.md`.
+- **`LOCAL_LLM_MODEL` stays a plain env var.** No model tag is hard-coded
+  outside `config.py`, and a test asserts it.
+
 ## Phase 7 — Website
 
 FinMentor is not Telegram-only. The web app is a second delivery surface over

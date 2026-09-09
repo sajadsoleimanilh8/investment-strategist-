@@ -282,3 +282,31 @@ def test_the_block_puts_each_figure_next_to_its_label():
 
     assert "BEFORE savings: $45,000,000" in block
     assert "AFTER savings: $0" in block
+
+
+# --- negative figures ----------------------------------------------------
+
+def test_a_negative_context_figure_is_grounded_when_quoted():
+    """`numbers_in_text` reads no sign, so "$-36,000,000" comes back as
+    36,000,000. Grounding is about the magnitude: a purchase that overdraws
+    someone used to flag its own deterministic rendering as invented."""
+    context = {"savings_after": -36_000_000.0}
+
+    assert ungrounded_numbers("You would be $-36,000,000 short.", context) == []
+    assert ungrounded_numbers("You would be $36,000,000 short.", context) == []
+
+
+def test_the_rendered_context_never_trips_the_grounding_check():
+    from app.ai.rendering import render_context
+
+    context = {
+        "purchase_price": 40_000_000.0, "savings_before": 3_000_000.0,
+        "savings_after": -36_000_000.0, "emergency_months_after": 0.0,
+        "health_score_before": 12.9, "health_score_after": 12.7,
+    }
+
+    assert ungrounded_numbers(render_context(context), context) == []
+
+
+def test_a_magnitude_that_is_in_no_context_field_is_still_caught():
+    assert ungrounded_numbers("You have $99,000,000.", {"savings_after": -36_000_000.0})
