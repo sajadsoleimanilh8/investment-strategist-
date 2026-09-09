@@ -74,3 +74,54 @@ def render_context(context: dict, *, preamble: str = "") -> str:
     body = "\n".join(_lines(context))
     return f"{preamble}\n{body}".strip() if preamble else body
 
+
+# --- before/after ---------------------------------------------------------
+#
+# A what-if and a purchase decision are both "here is the number now, here is
+# the number after". Handed only nested JSON, a 3B routinely reports the right
+# figure on the wrong side — "1.82 months after" when 1.82 was the before. It
+# is not reasoning about which is which; it is picking a number out of a blob.
+#
+# So the pair is laid out for it, labelled, one line each, before the JSON. The
+# JSON still follows, because the safety layer reads the context, not the
+# prompt — this changes what the model sees, never what it is checked against.
+
+#: The two shapes the engine produces: `SimulationOut` nests two scenarios,
+#: `DecisionOut` flattens to `<field>_before` / `<field>_after`.
+BEFORE_AFTER_KEYS = ("current", "scenario")
+_BEFORE, _AFTER = "_before", "_after"
+
+SIDES_HEADING = "Before and after, side by side (copy these exactly):"
+
+
+def _pair_lines(pairs: list[tuple[str, object, object]]) -> list[str]:
+    return [
+        f"BEFORE {name}: {format_value(name, before)}"
+        f"  |  AFTER {name}: {format_value(name, after)}"
+        for name, before, after in pairs
+    ]
+
+
+def before_after_pairs(context: dict) -> list[tuple[str, object, object]]:
+    """(field, before, after) for a context that has two sides, else empty."""
+    current, scenario = (context.get(key) for key in BEFORE_AFTER_KEYS)
+    if isinstance(current, dict) and isinstance(scenario, dict):
+        return [
+            (field, current[field], scenario[field])
+            for field in current
+            if field in scenario and not isinstance(current[field], (dict, list))
+        ]
+
+    stems = [
+        key[: -len(_BEFORE)] for key in context
+        if key.endswith(_BEFORE) and f"{key[: -len(_BEFORE)]}{_AFTER}" in context
+    ]
+    return [(stem, context[stem + _BEFORE], context[stem + _AFTER]) for stem in stems]
+
+
+def render_sides(context: dict) -> str:
+    """The labelled two-column block, or "" when the context has only one side."""
+    pairs = before_after_pairs(context)
+    if not pairs:
+        return ""
+    return "\n".join([SIDES_HEADING, *_pair_lines(pairs)])

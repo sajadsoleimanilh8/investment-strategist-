@@ -241,3 +241,44 @@ def test_scrubbing_and_downgrading_can_both_happen():
     assert report["downgraded"] is True
     assert "77,000,000" not in clean
 
+
+# --- the before/after block ---------------------------------------------
+
+def test_before_after_pairs_reads_a_two_scenario_context():
+    from app.ai.rendering import before_after_pairs
+
+    pairs = before_after_pairs({
+        "current": {"monthly_savings": 10.0, "emergency_months": 1.8},
+        "scenario": {"monthly_savings": 15.0, "emergency_months": 1.8},
+        "deltas": {"monthly_savings": 5.0},
+    })
+
+    assert ("monthly_savings", 10.0, 15.0) in pairs
+    assert not [p for p in pairs if p[0] == "deltas"], "nested values are not a side"
+
+
+def test_before_after_pairs_reads_suffixed_fields():
+    from app.ai.rendering import before_after_pairs
+
+    pairs = before_after_pairs({
+        "purchase_price": 60.0, "savings_before": 45.0, "savings_after": 0.0,
+    })
+
+    assert pairs == [("savings", 45.0, 0.0)]
+    assert not [p for p in pairs if p[0] == "purchase_price"]
+
+
+def test_a_one_sided_context_renders_no_block():
+    from app.ai.rendering import render_sides
+
+    assert render_sides({"financial_health_score": 62.3}) == ""
+    assert render_sides({}) == ""
+
+
+def test_the_block_puts_each_figure_next_to_its_label():
+    from app.ai.rendering import render_sides
+
+    block = render_sides({"savings_before": 45_000_000.0, "savings_after": 0.0})
+
+    assert "BEFORE savings: $45,000,000" in block
+    assert "AFTER savings: $0" in block

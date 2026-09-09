@@ -5,3 +5,12 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+
+# bot runtime log
+bot.log
+
+# fine-tuning: the scripts and the eval report are committed, the artefacts are not
+data/ft/
+models/*.gguf
+models/*.bin
+outputs/

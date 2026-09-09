@@ -6,6 +6,7 @@ loading code.
 """
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -110,13 +111,46 @@ def _health_context(db: Session, user_id: int) -> dict:
     }
 
 
+#: Which DNA trait describes which health component. The engine already
+#: decided whether each part of someone's finances is Strong, Moderate or Weak;
+#: this is the wiring that lets the chat snapshot carry that word next to the
+#: thing it describes, instead of in a separate dict.
+#:
+#: A 3B given "debt_load: 17.5 out of 20" reads "17.5 is a lot of debt". Given
+#: "debt_load, Strong" it has nothing left to get wrong. Judging a bounded
+#: score is exactly the reasoning small models fail at, and it is reasoning the
+#: engine has already done — so the chat snapshot does not ask for it.
+COMPONENT_VERDICT_TRAIT = {
+    "savings_rate": "saving_discipline",
+    "emergency_fund": "emergency_readiness",
+    "debt_load": "debt_management",
+    "budget_stability": "budget_stability",
+    "goal_progress": "goal_discipline",
+}
+
+#: A score note inside a detail string — "(20 pts at 25%)". Prose only in the
+#: chat snapshot: a raw scoring rule is one more number to misread.
+_SCORE_NOTE = re.compile(r"\s*\((?:[^()]*\bpts?\b[^()]*)\)")
+_NEUTRAL_NOTE = re.compile(r"\s*—\s*neutral score\s*$")
+
+
+def plain_detail(detail: str) -> str:
+    """A component's detail with its scoring arithmetic stripped out."""
+    cleaned = _NEUTRAL_NOTE.sub("", _SCORE_NOTE.sub("", detail or ""))
+    return cleaned.strip()
+
+
 def build_chat_snapshot(db: Session, user_id: int) -> dict:
     """Where this person stands, for the free-chat path — and nothing more.
 
     The guide is handed figures the engine has already computed, never rows to
-    do arithmetic on. It is deliberately the same set `_health_context` builds,
-    trimmed to what a conversation needs: enough to say "your emergency fund is
-    the thin part" without handing the model anything it could miscalculate.
+    do arithmetic on — and, since the engine also decided what those figures
+    mean, each component arrives with its verdict attached. The model's job is
+    to copy a word and write warmly around it, not to grade anyone.
+
+    Deliberately narrower than `_health_context`: no points, no maximums, no
+    scale. Those stay on the precise `/health` path, which shows them in a bar
+    chart the user can read for themselves.
     """
     twin, missing = _twin_or_unavailable(db, user_id)
     if twin is None:
@@ -124,23 +158,21 @@ def build_chat_snapshot(db: Session, user_id: int) -> dict:
 
     score = compute_health_score(twin)
     dna = build_dna(twin, completed_topics=education_repo.count_completed(db, user_id))
+    bands = dna.model_dump()
+
     return {
         "onboarded": True,
         "health_score": score.total,
-        # `max_points` and the band travel with the score on purpose. Given a
-        # bare "debt_load: 17.5" a 3B reads "17.5 is a lot of debt"; given
-        # "17.5 out of 20, Strong" it reads what the number actually means.
         "components": [
             {
                 "name": component.name,
-                "points": component.points,
-                "max_points": component.max_points,
-                "detail": component.detail,
+                "verdict": bands[COMPONENT_VERDICT_TRAIT[component.name]],
+                "plain": plain_detail(component.detail),
             }
             for component in score.components
+            if component.name in COMPONENT_VERDICT_TRAIT
         ],
-        "score_scale": "each component is out of 20; higher is always better",
-        "dna": dna.model_dump(),
+        "financial_knowledge": bands["financial_knowledge"],
         "savings_rate": twin.savings_rate,
         "emergency_months": twin.emergency_months,
         "monthly_savings": twin.monthly_savings,

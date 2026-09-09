@@ -163,8 +163,40 @@ def test_the_snapshot_carries_figures_the_engine_already_computed(db, demo_user_
     assert {c["name"] for c in snapshot["components"]} == {
         "savings_rate", "emergency_fund", "debt_load", "budget_stability", "goal_progress",
     }
-    assert snapshot["dna"]["saving_discipline"]
     assert snapshot["active_goals"][0]["progress_pct"] >= 0
+
+
+def test_every_component_arrives_with_the_engine_s_own_verdict(db, demo_user_id):
+    """The fix for the defect a live 3B kept hitting: it read "debt_load 17.5
+    out of 20" as heavy debt. It is never shown the score now — only the word
+    the engine already chose."""
+    from app.api.deps import COMPONENT_VERDICT_TRAIT, load_twin
+    from app.services.financial_dna import build_dna
+
+    dna = build_dna(load_twin(db, demo_user_id), completed_topics=0).model_dump()
+    snapshot = answer_question(db, demo_user_id, CHATTY).used_context
+
+    for component in snapshot["components"]:
+        assert component["verdict"] == dna[COMPONENT_VERDICT_TRAIT[component["name"]]]
+        assert component["verdict"] in {"Strong", "Moderate", "Weak"}
+        assert component["plain"]
+
+
+def test_the_chat_snapshot_shows_no_raw_scores_to_misjudge(db, demo_user_id):
+    snapshot = answer_question(db, demo_user_id, CHATTY).used_context
+
+    for component in snapshot["components"]:
+        assert "points" not in component
+        assert "max_points" not in component
+        assert "pts" not in component["plain"], "the scoring rule is not prose"
+    assert "score_scale" not in snapshot
+
+
+def test_the_precise_health_path_still_carries_the_points(db, demo_user_id):
+    """`/health` draws a bar chart, so it keeps what the chat path drops."""
+    context = answer_question(db, demo_user_id, "explain my health score").used_context
+
+    assert all("points" in c and "max_points" in c for c in context["components"])
 
 
 def test_the_model_is_handed_the_snapshot_and_the_last_turn(db, demo_user_id, monkeypatch):
@@ -314,3 +346,47 @@ def test_a_precise_answer_is_recorded_under_its_own_intent(db, demo_user_id):
 
     assert [turn["intent"] for turn in transcript(db, demo_user_id)] == ["chat", "health"]
 
+
+# --- labelled before/after ----------------------------------------------
+#
+# The other defect the live 3B kept hitting: reporting a correct figure on the
+# wrong side. It is handed the pair labelled now, ahead of the JSON.
+
+def test_a_what_if_prompt_labels_both_sides(db, demo_user_id, monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        FakeLocalProvider, "generate",
+        lambda self, prompt, system=None: prompts.append(prompt) or "Saving more helps.",
+    )
+
+    answer_question(db, demo_user_id, "what if I save 5m more each month?")
+
+    assert "BEFORE monthly_savings" in prompts[0]
+    assert "AFTER monthly_savings" in prompts[0]
+    assert prompts[0].index("BEFORE") < prompts[0].index("Context ("), "sides come first"
+
+
+def test_a_purchase_prompt_labels_both_sides(db, demo_user_id, monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        FakeLocalProvider, "generate",
+        lambda self, prompt, system=None: prompts.append(prompt) or "Here is the effect.",
+    )
+
+    answer_question(db, demo_user_id, "should I buy a 60m laptop?")
+
+    assert "BEFORE savings" in prompts[0] and "AFTER savings" in prompts[0]
+    assert "BEFORE emergency_months" in prompts[0]
+
+
+def test_a_one_sided_context_gets_no_block(db, demo_user_id, monkeypatch):
+    prompts = []
+    monkeypatch.setattr(
+        FakeLocalProvider, "generate",
+        lambda self, prompt, system=None: prompts.append(prompt) or "Your score is 62.3.",
+    )
+
+    answer_question(db, demo_user_id, "explain my health score")
+
+    assert "BEFORE" not in prompts[0]
+    assert "\n\n\n" not in prompts[0], "the empty slot must not leave a hole"
