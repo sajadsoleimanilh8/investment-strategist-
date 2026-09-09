@@ -136,17 +136,22 @@ def test_only_the_ask_pipeline_imports_the_synthesizer():
     assert importers == ["api/ask.py"], f"unexpected synthesizer importers: {importers}"
 
 
-def test_every_synthesizer_return_goes_through_safety():
-    """Static check: `explain` returns only via the `_finish` wrapper."""
+@pytest.mark.parametrize("entry_point", ("explain", "chat"))
+def test_every_synthesizer_return_goes_through_safety(entry_point):
+    """Static check: both entry points return only via the `_finish` wrapper.
+
+    `chat` is looser prose than `explain`, which is exactly why it needs the
+    same guard — a warm reply is not a licence to skip grounding.
+    """
     source = (APP / "ai" / "synthesizer.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
-    explain = next(
+    function = next(
         node for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "explain"
+        if isinstance(node, ast.FunctionDef) and node.name == entry_point
     )
 
-    returns = [node for node in ast.walk(explain) if isinstance(node, ast.Return)]
-    assert returns, "explain must return something"
+    returns = [node for node in ast.walk(function) if isinstance(node, ast.Return)]
+    assert returns, f"{entry_point} must return something"
     for node in returns:
         assert isinstance(node.value, ast.Call), "every return must call the safety wrapper"
         assert node.value.func.id == "_finish"
@@ -160,6 +165,68 @@ def test_every_synthesizer_return_goes_through_safety():
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
     ]
     assert "enforce" in calls, "_finish must call safety.enforce"
+
+
+def test_the_chat_path_reaches_no_persistence_and_no_engine():
+    """`chat` sees history and a snapshot — both handed to it, neither fetched."""
+    imports = imported_modules(APP / "ai" / "synthesizer.py")
+
+    assert not [n for n in imports if n.startswith(("app.repositories", "app.db", "app.models"))]
+    assert not [n for n in imports if n.startswith("app.services")]
+
+
+def test_every_chat_answer_carries_a_safety_report():
+    """The runtime proof for the conversational path, both tiers."""
+    from app.ai import synthesizer
+
+    snapshot = {"onboarded": True, "health_score": 62.3, "savings_rate": 0.35}
+    result = synthesizer.chat("hey", snapshot, [])
+
+    assert result["safety_report"], "no chat reply may skip the safety layer"
+    assert result["text"].strip()
+    assert result["used_context"] == snapshot
+
+
+def test_a_dead_model_makes_chat_raise_rather_than_invent():
+    """The caller owns the floor: `chat` must not paper over an outage."""
+    from app.ai import synthesizer
+    from app.ai.local_llm import FakeLocalProvider, LocalLLMUnavailable
+
+    FakeLocalProvider.unavailable = True
+    try:
+        with pytest.raises(LocalLLMUnavailable):
+            synthesizer.chat("hey", {"onboarded": True}, [])
+    finally:
+        FakeLocalProvider.unavailable = False
+
+
+# --- the persona must not eat the rules ---------------------------------
+
+@pytest.mark.parametrize(
+    "clause",
+    [
+        "Never output a number that is not in the context",
+        "Do not compute new numbers",
+        "Never tell the user to buy, sell, or invest",
+        "unavailable, say that plainly",
+        "Do not promise or predict future returns",
+        "never as a forecast",
+    ],
+)
+def test_the_system_prompt_keeps_every_safety_clause(clause):
+    """A tone rewrite is the likeliest way one of these quietly disappears."""
+    from app.ai.prompts import SYSTEM_PROMPT
+
+    assert clause in SYSTEM_PROMPT
+
+
+def test_the_chat_template_binds_the_model_to_the_snapshot():
+    from app.ai.prompts import CHAT_TEMPLATE
+
+    assert "ONLY" in CHAT_TEMPLATE
+    assert "{snapshot_json}" in CHAT_TEMPLATE
+    assert "{history}" in CHAT_TEMPLATE
+    assert "{question}" in CHAT_TEMPLATE
 
 
 def test_every_answer_carries_a_safety_report():

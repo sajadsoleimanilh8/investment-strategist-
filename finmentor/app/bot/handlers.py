@@ -74,9 +74,19 @@ async def _busy(update: Update, note: str = messages.CALCULATING) -> None:
 
 def _lookup_user(telegram_id: int, user_data: dict) -> int | None:
     """The onboarded user id, or None. Runs in a worker thread — it hits the DB."""
+    user_id, onboarded = _lookup_status(telegram_id, user_data)
+    return user_id if onboarded else None
+
+
+def _lookup_status(telegram_id: int, user_data: dict) -> tuple[int, bool]:
+    """The user id and whether they have a profile — both, without gating.
+
+    `/ask` needs this rather than `_lookup_user`: someone who has not onboarded
+    can still hold a conversation, they just get a snapshot that says so.
+    """
     with session() as db:
         user_id = resolve_user_id(db, user_data, telegram_id)
-        return user_id if is_onboarded(db, user_id) else None
+        return user_id, is_onboarded(db, user_id)
 
 
 async def _needs_profile(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int | None:
@@ -273,13 +283,20 @@ async def goal_added_reply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, draft
 # --- free text ----------------------------------------------------------
 
 async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str) -> None:
-    user_id = await _needs_profile(update, ctx)
-    if user_id is None:
-        await _reply(update, messages.NOT_ONBOARDED, keyboards.onboarding_prompt())
-        return
+    """Anything the user types at the guide.
+
+    Unlike the data commands, this does not turn a profile-less user away: the
+    pipeline hands the guide a snapshot that says they have not onboarded and
+    it invites them to /start in its own words. The keyboard underneath is the
+    matching one, so the next step is a single tap either way.
+    """
+    user_id, onboarded = await asyncio.to_thread(
+        _lookup_status, update.effective_user.id, ctx.user_data
+    )
     await _busy(update, messages.THINKING)
     text = await asyncio.to_thread(_ask_payload, user_id, question)
-    await _reply(update, text, keyboards.main_menu())
+    keyboard = keyboards.main_menu() if onboarded else keyboards.onboarding_prompt()
+    await _reply(update, text, keyboard)
 
 
 async def _run_free_text_simulation(

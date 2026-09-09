@@ -366,3 +366,38 @@ async def test_the_whatif_prompt_arms_the_next_message(demo, replies, ctx):
     await handlers.free_text(msg(replies, "what if I save 5m more each month"), ctx)
 
     assert any("SCENARIO" in reply for reply in replies)
+
+
+# --- the conversational path --------------------------------------------
+
+@pytest.mark.asyncio
+async def test_a_chatty_message_gets_one_warm_reply_with_the_menu(demo, replies, ctx):
+    await handlers.free_text(msg(replies, "i want to save for a car"), ctx)
+
+    assert replies[0] == messages.THINKING
+    assert len(replies) == 2, "one spinner, one answer"
+    assert replies[1].strip()
+
+
+@pytest.mark.asyncio
+async def test_a_user_who_has_not_onboarded_still_gets_a_reply(
+    bot_db, replies, ctx, chat_stub
+):
+    """The guide answers and nudges — it does not slam a door."""
+    update = FakeUpdate(replies, text="i want to save for a car", telegram_id=930_001)
+
+    await handlers.free_text(update, ctx)
+
+    assert messages.THINKING in replies
+    assert len(replies) == 2
+    assert messages.NOT_ONBOARDED not in replies
+
+
+@pytest.mark.asyncio
+async def test_the_deterministic_commands_still_turn_that_user_away(
+    bot_db, replies, ctx, chat_stub
+):
+    """Only the guide is forgiving — /health has nothing to show without data."""
+    await handlers.send_health(FakeUpdate(replies, text="", telegram_id=930_002), ctx)
+
+    assert messages.NOT_ONBOARDED in replies

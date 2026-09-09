@@ -23,8 +23,11 @@ import json
 import logging
 
 from app.ai import remote_llm, safety
+from app.core.config import settings
 from app.ai.local_llm import LocalLLMUnavailable, get_local_provider
-from app.ai.prompts import EXPLAIN_TEMPLATE, SYNTHESIS_TEMPLATE
+from app.ai.prompts import (
+    CHAT_SYNTHESIS_TEMPLATE, CHAT_TEMPLATE, EXPLAIN_TEMPLATE, SYNTHESIS_TEMPLATE,
+)
 from app.ai.rendering import render_context
 
 log = logging.getLogger("finmentor.ai")
@@ -33,6 +36,11 @@ DETERMINISTIC_PREAMBLE = (
     "The explanation model is unavailable, so here are your figures exactly as "
     "they were calculated:"
 )
+
+#: Ceiling on the rendered history, so a long-running chat cannot crowd the
+#: figures out of a 3B's context window. Turns are dropped oldest-first.
+HISTORY_CHAR_BUDGET = 1500
+NO_HISTORY = "(this is the start of the conversation)"
 
 
 def _finish(text: str, *, source: str, context: dict, market_context: bool) -> dict:
@@ -81,3 +89,67 @@ def explain(question: str, context: dict, *, market_context: bool = False) -> di
         merged = remote_draft
 
     return _finish(merged, source="hybrid", context=context, market_context=market_context)
+
+
+# --- free conversation ---------------------------------------------------
+#
+# The chat path is the one place the assistant sees history, and the one place
+# it is not answering a precise question. It still gets figures the engine
+# already computed — a snapshot, never rows — and still leaves through
+# `_finish`, so a warm reply is held to exactly the same grounding rule as a
+# health explanation.
+
+
+def render_history(turns: list[dict], limit: int | None = None) -> str:
+    """The last few exchanges as plain text, oldest first, newest last.
+
+    Truncated from the front: the most recent turn is the one that makes a
+    reply feel like a conversation, so it is the last thing to go.
+    """
+    limit = settings.ai_chat_history_turns if limit is None else limit
+    recent = turns[-limit:] if limit > 0 else []
+    if not recent:
+        return NO_HISTORY
+
+    lines = []
+    for turn in recent:
+        lines.append(f"You: {turn.get('question', '')}".strip())
+        lines.append(f"Guide: {turn.get('answer', '')}".strip())
+
+    rendered = "\n".join(lines)
+    while len(rendered) > HISTORY_CHAR_BUDGET and len(lines) > 2:
+        lines = lines[2:]                      # drop the oldest exchange whole
+        rendered = "\n".join(lines)
+    return rendered[-HISTORY_CHAR_BUDGET:]
+
+
+def chat(message: str, snapshot: dict, history: list[dict]) -> dict:
+    """Reply warmly to a message that is not a precise question.
+
+    Raises `LocalLLMUnavailable` rather than swallowing it: with no model there
+    is no conversation to have, and the caller's canned capabilities answer is
+    a better floor than prose we would have to invent.
+    """
+    snapshot_json = json.dumps(snapshot, ensure_ascii=False, default=str)
+    prompt = CHAT_TEMPLATE.format(
+        snapshot_json=snapshot_json,
+        history=render_history(history),
+        question=message,
+    )
+    local = get_local_provider()
+    local_draft = local.generate(prompt)
+
+    remote_draft = remote_llm.generate(prompt) if remote_llm.is_enabled() else None
+    if not remote_draft:
+        return _finish(local_draft, source="local", context=snapshot,
+                       market_context=False)
+
+    try:
+        merged = local.generate(CHAT_SYNTHESIS_TEMPLATE.format(
+            question=message, snapshot_json=snapshot_json,
+            draft_a=local_draft, draft_b=remote_draft,
+        ))
+    except LocalLLMUnavailable:
+        merged = remote_draft
+
+    return _finish(merged, source="hybrid", context=snapshot, market_context=False)

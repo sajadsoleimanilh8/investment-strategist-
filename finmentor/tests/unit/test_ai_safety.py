@@ -240,3 +240,4 @@ def test_scrubbing_and_downgrading_can_both_happen():
     assert report["buy_sell_scrubbed"] is True
     assert report["downgraded"] is True
     assert "77,000,000" not in clean
+

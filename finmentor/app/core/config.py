@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     local_llm_temperature: float = 0.3   # low: the model explains, it does not invent
     ai_max_tokens: int = 400
+    #: how many past turns the free-chat path may see. Only the chat path has
+    #: history at all — the precise paths (health, what-if, decision, market,
+    #: education) stay stateless so the same question always gets the same
+    #: answer from the same figures.
+    ai_chat_history_turns: int = 6
 
     # remote LLM (optional)
     remote_llm_enabled: bool = False

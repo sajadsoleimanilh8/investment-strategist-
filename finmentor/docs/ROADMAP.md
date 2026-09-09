@@ -128,6 +128,12 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
       2026-09-08 once everything had been ported into `app/` (see the note below)
 - [x] `app/bot/views.py` is pure (data in, string out, no Telegram import), so
       every message body is unit-tested against real engine output
+- [x] **Warm conversational layer** — a message the parser cannot read no longer
+      gets a canned list. It goes to `synthesizer.chat` with a pre-computed
+      snapshot (`deps.build_chat_snapshot`) and the last
+      `AI_CHAT_HISTORY_TURNS` exchanges, and comes back as prose that points at
+      the right feature. The precise paths stay stateless and unchanged; the
+      canned capabilities answer survives as the floor when the model is down.
 - **Done when:** the full Definition-of-Done flow works from Telegram in DEMO_MODE.
 
 ## Phase 7 — Website

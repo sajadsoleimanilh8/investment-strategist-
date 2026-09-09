@@ -27,6 +27,7 @@ from app.services import market_engine
 from app.services.decision_simulator import evaluate_purchase
 from app.services.education_engine import get_topic
 from app.services.financial_dna import build_dna
+from app.services.goal_engine import progress_pct as goal_progress_pct
 from app.services.financial_twin import build_twin
 from app.services.health_score import compute_health_score
 from app.services.simulation_engine import run_what_if
@@ -106,6 +107,52 @@ def _health_context(db: Session, user_id: int) -> dict:
         "emergency_months": twin.emergency_months,
         "monthly_savings": twin.monthly_savings,
         "active_goals": [goal.model_dump(mode="json") for goal in twin.goals],
+    }
+
+
+def build_chat_snapshot(db: Session, user_id: int) -> dict:
+    """Where this person stands, for the free-chat path — and nothing more.
+
+    The guide is handed figures the engine has already computed, never rows to
+    do arithmetic on. It is deliberately the same set `_health_context` builds,
+    trimmed to what a conversation needs: enough to say "your emergency fund is
+    the thin part" without handing the model anything it could miscalculate.
+    """
+    twin, missing = _twin_or_unavailable(db, user_id)
+    if twin is None:
+        return {"onboarded": False, "reason": missing.get("unavailable", "")}
+
+    score = compute_health_score(twin)
+    dna = build_dna(twin, completed_topics=education_repo.count_completed(db, user_id))
+    return {
+        "onboarded": True,
+        "health_score": score.total,
+        # `max_points` and the band travel with the score on purpose. Given a
+        # bare "debt_load: 17.5" a 3B reads "17.5 is a lot of debt"; given
+        # "17.5 out of 20, Strong" it reads what the number actually means.
+        "components": [
+            {
+                "name": component.name,
+                "points": component.points,
+                "max_points": component.max_points,
+                "detail": component.detail,
+            }
+            for component in score.components
+        ],
+        "score_scale": "each component is out of 20; higher is always better",
+        "dna": dna.model_dump(),
+        "savings_rate": twin.savings_rate,
+        "emergency_months": twin.emergency_months,
+        "monthly_savings": twin.monthly_savings,
+        "active_goals": [
+            {
+                "name": goal.name,
+                "progress_pct": goal_progress_pct(goal),
+                "target": goal.target_amount,
+                "current": goal.current_amount,
+            }
+            for goal in twin.goals
+        ],
     }
 
 

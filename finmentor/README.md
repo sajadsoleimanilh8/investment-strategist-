@@ -155,6 +155,13 @@ costs you the prose, not the numbers:
 | local | remote disabled or failed (the default) | `local` |
 | deterministic | the local model is down | `deterministic` |
 
+A message the parser *cannot* read — "i want to save for a car", "thanks,
+what next?" — is not a failure. It goes to the guide instead, which gets a
+snapshot of figures the engine already computed plus the last few turns of
+conversation, and replies warmly. That is the only path with history: the
+precise ones stay stateless so the same question always yields the same
+answer.
+
 Every answer passes through `app/ai/safety.py`, which drops buy/sell
 instructions, adds exactly one disclaimer, and — if the model emits a number
 that does not trace back to the context — discards the model's text entirely

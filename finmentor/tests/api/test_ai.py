@@ -119,16 +119,27 @@ def test_a_named_symbol_is_analysed(client, demo_user_id, db):
 
 # --- unparsed -----------------------------------------------------------
 
-def test_a_question_it_cannot_read_gets_the_capabilities_answer(client, demo_user_id, monkeypatch):
-    calls = []
-    monkeypatch.setattr(
-        FakeLocalProvider, "generate",
-        lambda self, prompt, system=None: calls.append(prompt) or "should never run",
-    )
+def test_a_message_it_cannot_parse_goes_to_the_guide(client, demo_user_id):
+    """Not a canned list any more: an unreadable message is a conversation.
+
+    ("how am I doing?" is not this case — the parser reads that as a health
+    question and it takes the precise path. This is for what genuinely does
+    not parse.)"""
+    body = ask(client, demo_user_id, "i want to save for a car").json()
+
+    assert body["source"] in {"local", "hybrid"}
+    assert body["used_context"]["onboarded"] is True
+    assert body["used_context"]["health_score"] > 0
+    assert FINANCE_DISCLAIMER in body["text"]
+
+
+def test_the_capabilities_answer_is_the_floor_when_the_model_is_gone(
+    client, demo_user_id, monkeypatch
+):
+    monkeypatch.setattr(FakeLocalProvider, "unavailable", True)
 
     body = ask(client, demo_user_id, "asdkjhasd qwe").json()
 
-    assert calls == [], "an unreadable question must not reach the model"
     assert body["source"] == "deterministic"
     assert "explain your financial health score" in body["text"]
     assert body["used_context"]["available_help"]
@@ -181,11 +192,11 @@ def test_a_second_question_appends_to_the_same_session(client, demo_user_id, db)
     assert db.scalar(select(func.count()).select_from(ChatSession)) == 1
 
 
-def test_an_unreadable_question_is_still_recorded(client, demo_user_id):
+def test_a_chat_turn_is_recorded_as_chat(client, demo_user_id):
     ask(client, demo_user_id, "zzzz")
 
     transcript = client.get(f"/api/ai/transcript/{demo_user_id}").json()
-    assert transcript[0]["intent"] == "smalltalk"
+    assert transcript[0]["intent"] == "chat"
 
 
 def test_the_transcript_of_an_unknown_user_is_404(client):

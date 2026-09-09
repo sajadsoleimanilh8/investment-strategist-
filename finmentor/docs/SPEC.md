@@ -121,6 +121,22 @@ Answers education + Financial Twin questions. Receives structured context
 (health score, savings rate, emergency months, active goals, market context)
 and never invents missing values — says when data is unavailable.
 
+**Tone.** The mentor is a warm, encouraging guide for a 16-25 year old who is
+new to money, not a form and not an advisor: short paragraphs, no jargon
+without a plain-English line beside it, what is going well before what is
+weak, and never a lecture about how someone spends. The persona lives in
+`SYSTEM_PROMPT` *below* the safety rules, because a small model weights the
+top of its prompt hardest and warmth is never worth a wrong number.
+
+**Two shapes of answer.** A message the parser reads (health, what-if,
+decision, market, education) gets the precise path: one engine call, one
+context object, no conversation history, so the same question always produces
+the same answer. Anything else — "i want to save for a car", "thanks, what
+next?" — goes to the guide, which receives a *snapshot* of figures the engine
+already computed plus the last few turns, and replies conversationally. Both
+shapes pass through the same safety layer (section 16); the guide gets no
+latitude on numbers for being friendly.
+
 ### 15. Hybrid AI
 `local LLM -> optional remote LLM -> synthesizer`. Local is default and the
 reliable core. Config-driven (`LOCAL_LLM_*`, `REMOTE_LLM_*`), no hard-coded

@@ -73,3 +73,4 @@ def render_context(context: dict, *, preamble: str = "") -> str:
 
     body = "\n".join(_lines(context))
     return f"{preamble}\n{body}".strip() if preamble else body
+
