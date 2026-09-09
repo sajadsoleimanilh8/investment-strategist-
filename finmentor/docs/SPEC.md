@@ -142,10 +142,21 @@ mini quiz. Curated content, not AI-generated.
 50 / 30 / 20 as an adjustable **guideline**, not a universal truth. User can
 customise the split.
 
-### 19. Telegram UX
-Primary interface. Commands: `/start /profile /health /budget /goals
-/simulate /market /watchlist /learn /ask /help`. Inline keyboards everywhere;
-minimise typing. Plain English, simple terminology.
+### 19. Interfaces
+Two delivery surfaces over one FastAPI backend; all business logic stays
+server-side.
+
+**Telegram bot** (ships first — ROADMAP Phase 6). Commands: `/start /profile
+/health /budget /goals /simulate /market /watchlist /learn /ask /help`. Inline
+keyboards everywhere; minimise typing. Identity = Telegram user id, no login.
+
+**Web app** (ROADMAP Phase 7). Same features as a dark financial dashboard
+(§30). Requires real auth — signup / login, hashed passwords, JWT or session
+cookies (`app/core/security.py`); `users` gains `email` + `password_hash`. A
+user only ever sees their own data. The frontend calls the documented API and
+holds no logic of its own.
+
+Plain English, simple terminology, on both.
 
 ## 20. Data model
 See [`DATA_MODEL.md`](DATA_MODEL.md). PostgreSQL + SQLAlchemy + Alembic.

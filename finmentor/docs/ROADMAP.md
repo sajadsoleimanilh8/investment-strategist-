@@ -121,12 +121,41 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
 - [ ] Port/retire legacy `bot/`, `main.py`, top-level `config.py`
 - **Done when:** the full Definition-of-Done flow works from Telegram in DEMO_MODE.
 
-## Phase 7 — Polish
-- [ ] Error handling + user-friendly messages everywhere
-- [ ] Rate limiting (Redis) on `/ask` and simulation endpoints
+## Phase 7 — Website
+
+FinMentor is not Telegram-only. The web app is a second delivery surface over
+the **same** FastAPI backend — `app/services`, `app/ai`, `app/market`,
+`app/api` are reused unchanged. Telegram keeps working throughout.
+
+- [ ] **Auth** — build out `app/core/security.py`: signup / login, password
+      hashing (argon2/bcrypt), JWT access + refresh (or session cookies), an
+      `require_user` FastAPI dependency. Add `email` + `password_hash` to
+      `users` (Alembic migration). Telegram users stay keyed by `telegram_id`;
+      a row can have both.
+- [ ] Guard every `/api/*` route (except signup/login/healthz) with
+      `require_user`; a user only reads/writes their own data.
+- [ ] CORS config; rate limiting (Redis) on `/api/ai/ask` and `/api/simulations`.
+- [ ] Fill API gaps the web needs: expose the Time Machine, education
+      content listing + quiz submission, full profile/expense editing,
+      watchlist mutation (some exist bot-only today).
+- [ ] Frontend — stack decision (Next.js / SvelteKit / Vite+React), then the
+      dashboard per SPEC §30 (dark, green/red/neutral, "trust · clarity ·
+      youth"): onboarding, Financial Health + DNA, goals, What-if + Decision
+      simulators, Time Machine, Market watch, Ask AI, Learn.
+- [ ] Frontend talks only to the documented API — no business logic in the
+      client, same rule as the bot.
+- **Done when:** a new user can sign up on the web and complete the full
+  SPEC §36 flow in the browser, in DEMO_MODE, with external APIs and Ollama
+  down — and the Telegram bot still passes its own §36 flow unchanged.
+
+## Phase 8 — Polish & Deploy
+- [ ] Error handling + user-friendly messages everywhere (bot + web + API)
 - [ ] `DEMO_MODE` end-to-end pass with all external services off (CI check)
 - [ ] Full test suite green in CI; coverage on `app/services/*`
-- [ ] Deployment: Dockerfile, compose for app+db+redis, `alembic upgrade` on boot
+- [ ] Deployment: Dockerfile(s), compose for api + web + db + redis,
+      `alembic upgrade` on boot
+- [ ] Pre-deploy manual checklist: real Alpha Vantage / CoinGecko keys, real
+      OpenAI/Anthropic call if remote LLM is enabled
 - [ ] Docs: finalise README, add screenshots / demo script
 - [ ] Optional: local-model fine-tune notes (financial tone / accuracy)
 
