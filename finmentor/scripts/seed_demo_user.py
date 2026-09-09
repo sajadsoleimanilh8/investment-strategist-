@@ -22,6 +22,7 @@ from app.repositories import goals as goals_repo
 from app.repositories import profiles as profiles_repo
 from app.repositories import users as users_repo
 from app.schemas.finance import FinancialProfileIn, GoalIn
+from scripts.seed_market_assets import seed_demo_watchlist, seed_market_assets
 
 log = logging.getLogger("finmentor.seed")
 
@@ -72,9 +73,14 @@ def main() -> int:
     configure_logging()
     with SessionLocal() as db:
         user_id = seed_demo_user(db)
+        # market assets + a watchlist, so /market is demonstrable too
+        assets = seed_market_assets(db)
+        watched = seed_demo_watchlist(db, user_id)
+        db.commit()
 
     log.info("seeded demo user id=%s profile=%s", user_id, safe_json(DEMO_PROFILE))
     print(f"demo user seeded: id={user_id}, telegram_id={DEMO_TELEGRAM_ID}")
+    print(f"market seeded: {assets} assets, {watched} watchlist entries")
     return 0
 
 

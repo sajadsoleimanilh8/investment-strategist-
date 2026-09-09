@@ -3,8 +3,9 @@ import pytest
 from app.schemas.finance import ExpenseBreakdown, FinancialProfileIn, GoalIn
 from app.services.financial_twin import build_twin
 from app.services.health_score import (
-    STABILITY_NEUTRAL_POINTS, budget_deviation, compute_health_score, score_budget_stability,
-    score_debt_load, score_emergency_fund, score_goal_progress, score_savings_rate,
+    GOAL_NEUTRAL_POINTS, STABILITY_NEUTRAL_POINTS, budget_deviation, compute_health_score,
+    score_budget_stability, score_debt_load, score_emergency_fund, score_goal_progress,
+    score_savings_rate,
 )
 
 COMPONENT_NAMES = {
@@ -114,8 +115,15 @@ def test_stability_accepts_expense_breakdowns_as_well_as_dicts():
 
 # --- goal progress ------------------------------------------------------
 
-def test_no_goals_scores_zero():
-    assert score_goal_progress([]) == 0.0
+def test_no_goals_is_neutral_not_punitive():
+    # a user was never asked for a goal — same treatment as a missing budget plan
+    assert score_goal_progress([]) == GOAL_NEUTRAL_POINTS
+
+
+def test_having_goals_and_saving_nothing_still_scores_zero():
+    # this one IS measured: the user has goals and has put nothing toward them
+    empty = GoalIn(name="laptop", target_amount=60_000_000, current_amount=0)
+    assert score_goal_progress([empty]) == 0.0
 
 
 def test_single_goal_scales_with_progress():
@@ -169,6 +177,44 @@ def test_components_carry_a_human_readable_detail():
     assert all(c.detail for c in score.components)
 
 
+def test_a_user_with_no_goals_is_told_how_to_score_there():
+    score = compute_health_score(demo_twin(goals=[]))
+    goal_component = next(c for c in score.components if c.name == "goal_progress")
+
+    assert goal_component.points == GOAL_NEUTRAL_POINTS
+    assert "add one" in goal_component.detail
+
+
+def perfect_except_goals(*, with_plan: bool):
+    """Maxes savings, emergency fund and debt load; no goals set."""
+    expenses = ExpenseBreakdown(housing=5_000_000)
+    return build_twin(
+        FinancialProfileIn(
+            monthly_income=30_000_000,
+            expenses=expenses,
+            planned_budget=expenses if with_plan else None,
+            emergency_fund=30_000_000,          # 6 months of essentials
+            monthly_debt_payment=0,
+        )
+    )
+
+
+def test_a_debt_free_saver_with_no_goals_is_capped_at_ninety_two():
+    """Budgeting to plan but never setting a goal: 20+20+20+20 + the neutral 12."""
+    score = compute_health_score(perfect_except_goals(with_plan=True))
+
+    assert score.total == 20.0 + 20.0 + 20.0 + 20.0 + GOAL_NEUTRAL_POINTS
+    assert score.total == 92.0     # was 80.0 while "no goals" scored zero
+
+
+def test_both_neutral_components_together_cap_the_score_at_eighty_four():
+    """Neither a plan nor a goal: both unmeasured components sit at 12/20."""
+    score = compute_health_score(perfect_except_goals(with_plan=False))
+
+    assert score.total == 20.0 + 20.0 + 20.0 + STABILITY_NEUTRAL_POINTS + GOAL_NEUTRAL_POINTS
+    assert score.total == 84.0
+
+
 def test_demo_user_scores_the_expected_breakdown():
     score = compute_health_score(demo_twin())
     points = {c.name: c.points for c in score.components}
@@ -199,7 +245,7 @@ def test_zero_income_does_not_divide_by_zero():
     points = {c.name: c.points for c in score.components}
     assert points["savings_rate"] == 0.0
     assert points["debt_load"] == 0.0
-    assert points["goal_progress"] == 0.0
+    assert points["goal_progress"] == GOAL_NEUTRAL_POINTS
     assert score.total == pytest.approx(sum(c.points for c in score.components), abs=0.05)
 
 
@@ -213,7 +259,7 @@ def test_empty_profile_scores_the_neutral_floor():
         "emergency_fund": 0.0,
         "debt_load": 20.0,
         "budget_stability": STABILITY_NEUTRAL_POINTS,
-        "goal_progress": 0.0,
+        "goal_progress": GOAL_NEUTRAL_POINTS,
     }
 
 

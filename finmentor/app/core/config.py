@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     env: str = "dev"
     log_level: str = "INFO"
 
+    # background jobs (off under pytest; see tests/conftest.py)
+    enable_scheduler: bool = True
+
     # presentation
     currency_symbol: str = "$"
 
@@ -35,10 +38,12 @@ class Settings(BaseSettings):
     stock_watchlist: list[str] = Field(default_factory=lambda: ["AAPL", "MSFT", "TSLA", "NVDA"])
     crypto_watchlist: list[str] = Field(default_factory=lambda: ["bitcoin", "ethereum", "solana"])
 
-    # local LLM (default)
+    # local LLM (default engine; "fake" is the deterministic test double)
     local_llm_provider: str = "ollama"
     local_llm_model: str = "llama3.2:3b"
     ollama_host: str = "http://localhost:11434"
+    local_llm_temperature: float = 0.3   # low: the model explains, it does not invent
+    ai_max_tokens: int = 400
 
     # remote LLM (optional)
     remote_llm_enabled: bool = False

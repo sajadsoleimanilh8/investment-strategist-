@@ -12,12 +12,15 @@ PostgreSQL + SQLAlchemy 2.0 + Alembic. Minimal PII (Telegram id + locale).
 | `watchlists` | user market watchlist | user_id, symbol |
 | `market_assets` | known assets | symbol, provider_id, asset_class, display_name, is_active |
 | `market_snapshots` | cached price series | symbol, as_of, points_json |
-| `simulations` | saved scenarios | kind, params_json, result_json |
+| `simulations` | saved scenarios | kind (`what_if`/`time_machine`/`decision`), params_json, result_json |
 | `chat_sessions` | AI transcript | transcript_json |
 | `education_progress` | /learn progress | topic_key, completed, quiz_score |
 
 Derived objects (NOT stored, recomputed on demand): Financial Twin, Health
-Score, Financial DNA.
+Score, Financial DNA. The DNA traits are `saving_discipline`,
+`emergency_readiness`, `debt_management`, `goal_discipline`, `budget_stability`
+(Strong / Moderate / Weak, Strong always being the healthy end) plus
+`financial_knowledge` (Beginner / Intermediate / Advanced).
 
 Budget stability compares that period's `expense_records` against
 `financial_profiles.planned_budget_json` (the planned per-category snapshot).
@@ -33,6 +36,12 @@ Conventions (phase 1):
 - Every user-owned table has `ON DELETE CASCADE` and a matching ORM relationship
   on `User`, so deleting a user removes all of their data.
 - `*_json` columns hold `json.dumps` text, not `JSONB`.
+- `market_snapshots` has no `days` column: a snapshot is keyed by symbol
+  and satisfies any request for that many days or fewer. Asking for a
+  longer window is a cache miss and replaces the row.
+  `app/repositories/simulations.py` owns that encode/decode, so callers pass and
+  receive plain dicts; `result_json` stores the engine output verbatim, which is
+  what makes a saved run reproducible without re-running it.
 - Enum-like columns (risk profile, income type, expense category, asset class,
   simulation kind) are guarded by CHECK constraints.
 - Schema lives in `migrations/versions/`; `alembic check` must report no drift.

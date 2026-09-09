@@ -75,8 +75,29 @@ def test_get_topic_round_trip_and_miss():
 
 
 def test_education_content_pulls_in_no_ai_module():
-    import sys
+    """The content is curated, not generated — the module imports no AI layer.
 
-    import app.services.education_engine  # noqa: F401
+    Checked statically: a `sys.modules` probe would only pass while no other
+    test had already imported `app.ai`, which makes it a test-order accident
+    rather than an invariant.
+    """
+    import ast
+    import pathlib
 
-    assert not [name for name in sys.modules if name.startswith("app.ai")]
+    module = pathlib.Path(app_education_engine_path())
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+
+    assert not [name for name in imported if name.startswith("app.ai")]
+
+
+def app_education_engine_path() -> str:
+    import app.services.education_engine as engine
+
+    return engine.__file__

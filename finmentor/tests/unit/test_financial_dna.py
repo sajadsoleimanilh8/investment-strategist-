@@ -57,7 +57,7 @@ def test_emergency_readiness_bands(emergency_fund, expected):
     assert build_dna(state).emergency_readiness == expected
 
 
-# --- debt exposure: read as health, Strong = comfortably low burden -----
+# --- debt management: Strong = comfortably low, well-handled burden -----
 
 @pytest.mark.parametrize(
     ("payment", "expected"),
@@ -67,8 +67,8 @@ def test_emergency_readiness_bands(emergency_fund, expected):
         (500_000, "Strong"),        # 5%  -> 17.5 pts
     ],
 )
-def test_debt_exposure_bands(payment, expected):
-    assert build_dna(twin(monthly_debt_payment=payment)).debt_exposure == expected
+def test_debt_management_bands(payment, expected):
+    assert build_dna(twin(monthly_debt_payment=payment)).debt_management == expected
 
 
 # --- goal discipline ----------------------------------------------------
@@ -82,8 +82,10 @@ def test_goal_discipline_bands(current, expected):
     assert build_dna(twin(goals=[goal])).goal_discipline == expected
 
 
-def test_no_goals_reads_as_weak_goal_discipline():
-    assert build_dna(twin()).goal_discipline == "Weak"
+def test_no_goals_reads_as_moderate_not_weak():
+    # the neutral 12/20 for "no goals yet" lands in the Moderate band, matching
+    # how a missing budget plan is treated
+    assert build_dna(twin()).goal_discipline == "Moderate"
 
 
 # --- budget stability ---------------------------------------------------
@@ -131,7 +133,7 @@ def test_knowledge_uses_the_completed_topic_count():
 def test_every_band_is_one_of_the_documented_labels():
     dna = build_dna(twin(goals=[GoalIn(name="g", target_amount=100, current_amount=50)]))
     bands = {
-        dna.saving_discipline, dna.emergency_readiness, dna.debt_exposure,
+        dna.saving_discipline, dna.emergency_readiness, dna.debt_management,
         dna.goal_discipline, dna.budget_stability,
     }
     assert bands <= {"Strong", "Moderate", "Weak"}

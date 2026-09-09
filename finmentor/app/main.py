@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
 
 from app.api.routes import ALL_ROUTERS
@@ -15,9 +17,37 @@ from app.core.logging import configure_logging, safe_json
 log = logging.getLogger("finmentor.api")
 
 
+def _start_scheduler() -> BackgroundScheduler:
+    """Warm the market cache on an interval so no request waits on a provider."""
+    from scripts.fetch_market_snapshots import main as refresh_snapshots
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
+        refresh_snapshots,
+        "interval",
+        seconds=settings.market_cache_ttl_seconds,
+        id="market_snapshots",
+        max_instances=1,
+        coalesce=True,          # a slow run must not queue up duplicates
+    )
+    scheduler.start()
+    log.info("market refresh scheduled every %ss", settings.market_cache_ttl_seconds)
+    return scheduler
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = _start_scheduler() if settings.enable_scheduler else None
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+
+
 def create_app() -> FastAPI:
     configure_logging()
-    app = FastAPI(title="FinMentor API", version="0.1.0")
+    app = FastAPI(title="FinMentor API", version="0.1.0", lifespan=lifespan)
     for router in ALL_ROUTERS:
         app.include_router(router)
 
@@ -42,7 +72,6 @@ def create_app() -> FastAPI:
     def healthz() -> dict:
         return {"status": "ok", "demo_mode": settings.demo_mode}
 
-    # TODO(phase-4): APScheduler lifespan job to warm the market cache.
     return app
 
 

@@ -52,39 +52,64 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
   *Verified: demo user scores 62.3/100 (20 / 6.1 / 17.5 / 12 / 6.7) with DNA
   Strong / Weak / Strong / Weak / Moderate / Beginner, served in ~10 ms.*
 
-## Phase 3 — Simulation
-- [ ] `simulation_engine.apply_scenario` + `project` (straight-line)
-- [ ] `simulation_engine.run_what_if` -> `SimulationOut` with deltas
-- [ ] `time_machine.compare_paths` over the 4 presets
-- [ ] `decision_simulator.evaluate_purchase`
-- [ ] `ai/intent.parse` — English number/percent parsing ("5M", "5 million",
-      "15%"), intent routing (rule-first; LLM fallback constrained to the schema)
-- [ ] `POST /api/simulations`, `GET /api/simulations/{user_id}` (+ persist to `simulations`)
-- [ ] Unit tests: scenario maths, projection, decision sim, parser fixtures
+## Phase 3 — Simulation  `[x]`
+- [x] `simulation_engine.apply_scenario` + `project` (straight-line); the twin's
+      derived arithmetic lives once in `financial_twin.derive_figures`, shared by
+      `build_twin` and `apply_scenario`
+- [x] `simulation_engine.run_what_if` -> `SimulationOut` with deltas
+- [x] `time_machine.compare_paths` over the 4 presets (stable order, one shared goal)
+- [x] `decision_simulator.evaluate_purchase` (affordable = savings stay >= 0)
+- [x] `ai/intent.parse` — English number/percent parsing ("5M", "5 million",
+      "15%"), rule-first intent routing; `llm_fallback` is the phase-5 seam and
+      currently returns an unparsed result rather than guessing
+- [x] `POST /api/simulations`, `GET /api/simulations/{user_id}` (+ persist to
+      `simulations`; no migration needed, the table already existed)
+- [x] Unit tests: scenario maths, projection, time machine, decision sim, 21
+      parser fixtures, architecture guards (no AI import on any simulator path)
 - **Done when:** "what if I save $5M more each month?" -> parsed params ->
   numeric before/after + goal-date shift, no LLM doing arithmetic.
+  *Verified live: parsed to `monthly_savings_delta=5,000,000`; savings
+  10.5M -> 15.5M/mo, goal 68.3% -> 85.0% at a 2-month horizon, goal date
+  2027-01-08 -> 2026-12-08.*
 
-## Phase 4 — Market
-- [ ] `market/cache.py` read-through cache -> `market_snapshots` (+ optional Redis)
-- [ ] APScheduler job in `app/main.py` lifespan; `scripts/fetch_market_snapshots.py`
-- [ ] Real `AlphaVantageProvider` / `CoinGeckoProvider` verified against live APIs
-- [ ] Watchlist CRUD + `market_assets` seed list
-- [ ] Endpoints: `GET /api/market/assets`, `/api/market/assets/{symbol}`,
-      `/api/market/watchlist/{user_id}`
-- [ ] Disclaimer on every market payload (schema default already present)
-- [ ] Tests: cache hit/miss, provider fallback to mock, ranking
+## Phase 4 — Market  `[x]`
+- [x] `market/cache.py` read-through cache -> `market_snapshots`
+      (snapshots are keyed by symbol, so a request for more days than were
+      stored is a miss; Redis left as a documented phase-7 accelerator)
+- [x] APScheduler job in `app/main.py` lifespan (gated by `ENABLE_SCHEDULER`,
+      off under pytest); `scripts/fetch_market_snapshots.py` runs standalone
+- [ ] Real `AlphaVantageProvider` / `CoinGeckoProvider` verified against live
+      APIs — **not done**: needs live keys and network, so it stays open. The
+      provider loop and its fallback to mock are covered by tests.
+- [x] Watchlist CRUD + `market_assets` seed list (`scripts/seed_market_assets.py`)
+- [x] Endpoints: `GET /api/market/assets`, `/api/market/assets/{symbol}`,
+      `GET/POST /api/market/watchlist/{user_id}`,
+      `DELETE /api/market/watchlist/{user_id}/{symbol}`
+- [x] Disclaimer on every market payload (schema default, never overridden)
+- [x] Tests: cache hit/miss/stale, provider fallback to mock, ranking, the
+      scheduled job, and a warm-cache zero-provider-call guard
 - **Done when:** `/market` works live AND with network off (mock), cache keeps
   external calls off the request path.
+  *Verified in DEMO_MODE against Postgres: the demo watchlist ranks
+  NVDA / BTC / AAPL / ETH by 7d momentum, and six repeat requests were served
+  with zero provider fetches.*
 
-## Phase 5 — AI
-- [ ] `ai/local_llm.py` verified against a running Ollama model
-- [ ] `ai/remote_llm.py` verified for openai + anthropic; returns None on failure
-- [ ] `ai/synthesizer.explain` — context-only prompting, hybrid merge
-- [ ] `ai/safety.enforce` — disclaimer once, strip buy/sell imperatives,
-      detect numbers absent from context
-- [ ] `POST /api/ai/ask` — assembles deterministic context, never lets LLM compute
-- [ ] Tests: remote-up -> hybrid, remote-down -> local, local-down -> deterministic
-      passthrough; safety scrubbing; "data unavailable" path
+## Phase 5 — AI  `[x]`
+- [x] `ai/local_llm.py` verified against a running Ollama model
+      (`/api/chat`, temperature 0.3; `available()` checks the model is actually
+      installed, cached 30s. `FakeLocalProvider` is the offline test double —
+      `LOCAL_LLM_PROVIDER=fake`, which is what pytest uses.)
+- [x] `ai/remote_llm.py` returns None on any failure, so a dead remote silently
+      degrades to local. **openai/anthropic not exercised against live APIs** —
+      that needs paid keys; the disabled-by-default and failure paths are tested.
+- [x] `ai/synthesizer.explain` — context-only prompting, hybrid merge, and a
+      single exit point (`_finish`) so no answer can skip the safety layer
+- [x] `ai/safety.enforce` — one disclaimer, buy/sell sentences dropped,
+      ungrounded numbers downgraded to the rendered context
+- [x] `POST /api/ai/ask` — parses intent, assembles the deterministic context,
+      and persists the exchange to `chat_sessions`; the LLM computes nothing
+- [x] Tests: remote-up -> hybrid, remote-down -> local, local-down ->
+      deterministic passthrough; safety scrubbing; "data unavailable" path
 - **Done when:** `/ask` explains a real health score / simulation with all three
   fallback tiers covered by tests.
 
@@ -107,19 +132,13 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
 
 ---
 
-## Legacy → app/ port checklist
-| Legacy file | Ported to | Phase | Status |
-|---|---|---|---|
-| `analysis/technical_indicators.py` | `app/services/market_engine.py` | 0 | `[x]` |
-| `finance/budget_planner.py` | `app/services/budget_engine.py` | 0 | `[x]` |
-| `data/market_data.py` | `app/market/{alpha_vantage,coingecko,mock_provider}.py` | 0/4 | `[~]` |
-| `ai/local_model.py` | `app/ai/local_llm.py` | 0/5 | `[~]` |
-| `ai/api_model.py` | `app/ai/remote_llm.py` | 0/5 | `[~]` |
-| `ai/combiner.py` | `app/ai/synthesizer.py` | 0/5 | `[~]` |
-| `education/qa_content.py` | `app/services/education_engine.py` | 0/2 | `[x]` |
-| `bot/handlers.py`, `bot/telegram_bot.py` | `app/bot/*` | 6 | `[ ]` |
-| `config.py` | `app/core/config.py` | 0/6 | `[~]` |
-| `main.py` | `app/bot/main.py` + `app/main.py` | 0/6 | `[~]` |
-| `tests/test_*` | `tests/unit/test_*` | 0 | `[x]` (new copies) |
+## Legacy prototype
 
-Delete a legacy file only after its row is `[x]` and nothing imports it.
+The flat v0 prototype (`ai/`, `analysis/`, `bot/`, `data/`, `education/`,
+`finance/`, `config.py`, `main.py`, and the two `tests/test_*.py` files that
+covered them) was **removed on 2026-09-08**. Every piece had been ported into
+`app/` and re-tested there — the market analytics into
+`app/services/market_engine.py`, the budget planner into
+`app/services/budget_engine.py`, the education content into
+`app/services/education_engine.py`, config into `app/core/config.py` — and
+nothing under `app/` or `scripts/` imported it.

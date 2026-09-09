@@ -15,6 +15,13 @@ fixture overrides the `get_db` dependency instead.
 import os
 
 os.environ.setdefault("DEMO_MODE", "true")
+# the background market refresh must never run under pytest — it would fetch
+# on a timer against whatever database the app engine points at
+os.environ.setdefault("ENABLE_SCHEDULER", "false")
+# no live model in the test environment: `fake` is the deterministic double in
+# app/ai/local_llm.py. Remote stays disabled; tests that want the hybrid tier
+# monkeypatch `app.ai.remote_llm.generate` / `is_enabled`.
+os.environ.setdefault("LOCAL_LLM_PROVIDER", "fake")
 
 import pytest
 from fastapi.testclient import TestClient

@@ -2,8 +2,11 @@
 metrics. Pure rules; the AI only narrates the result.
 
 Every band comes from the health-score components, so a label can never
-disagree with the number next to it. Bands are read as health, not magnitude:
-`debt_exposure = "Strong"` means the debt burden is comfortably low.
+disagree with the number next to it. Every trait reads the same direction —
+Strong is always the healthy end. `debt_management = "Strong"` means the debt
+burden is comfortably low and well handled (the trait is named for how the debt
+is managed, not for how much exposure there is, so that "Strong" cannot be
+misread as "strongly exposed").
 
     Strong    >= 14/20     (70%)
     Moderate  >=  7/20     (35%)
@@ -50,7 +53,7 @@ def build_dna(twin: FinancialTwinOut, completed_topics: int = 0) -> FinancialDNA
     return FinancialDNAOut(
         saving_discipline=_band(health_score.score_savings_rate(twin.savings_rate)),
         emergency_readiness=_band(health_score.score_emergency_fund(twin.emergency_months)),
-        debt_exposure=_band(
+        debt_management=_band(
             health_score.score_debt_load(twin.monthly_debt_payment, twin.income)
         ),
         goal_discipline=_band(health_score.score_goal_progress(twin.goals)),

@@ -56,7 +56,7 @@ def test_financial_dna_for_the_demo_user(client, demo_user_id, monkeypatch):
     assert response.json() == {
         "saving_discipline": "Strong",        # 35% savings rate
         "emergency_readiness": "Weak",        # 1.8 months of essentials
-        "debt_exposure": "Strong",            # payments are 5% of income
+        "debt_management": "Strong",            # payments are 5% of income
         "goal_discipline": "Weak",            # laptop at 33%
         "budget_stability": "Moderate",       # no planned budget yet
         "financial_knowledge": "Beginner",    # no completed /learn topics

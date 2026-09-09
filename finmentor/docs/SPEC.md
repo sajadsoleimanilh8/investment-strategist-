@@ -80,7 +80,7 @@ Debt Load        15/20
 
 ### 7. Financial DNA
 Human-readable bands from the same metrics: Saving Discipline, Emergency
-Readiness, Debt Exposure, Goal Discipline, Budget Stability (Strong /
+Readiness, Debt Management, Goal Discipline, Budget Stability (Strong /
 Moderate / Weak) + Financial Knowledge (Beginner / Intermediate / Advanced).
 Rule-generated; AI narrates.
 
@@ -217,7 +217,10 @@ symbol (`settings.currency_symbol`, default `$`) rather than a hard-coded
 unit.
 
 ## 32. AI system prompt
-See `app/ai/prompts.py::SYSTEM_PROMPT`.
+See `app/ai/prompts.py::SYSTEM_PROMPT` — the only place prompt text lives.
+Kept short and imperative because the default local model is a 3B: long prompts
+make small models drift, and drift here means an invented number. The safety
+layer (`app/ai/safety.py`) is the backstop, not the prompt.
 
 ## 36. Definition of Done (MVP)
 A new user can: `/start` -> create profile -> see Health -> see DNA -> create

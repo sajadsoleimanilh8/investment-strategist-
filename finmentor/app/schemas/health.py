@@ -19,7 +19,7 @@ class HealthScoreOut(BaseModel):
 class FinancialDNAOut(BaseModel):
     saving_discipline: str      # Strong | Moderate | Weak
     emergency_readiness: str
-    debt_exposure: str
+    debt_management: str
     goal_discipline: str
     budget_stability: str
     financial_knowledge: str    # Beginner | Intermediate | Advanced
