@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class UserIn(BaseModel):
     telegram_id: int = Field(gt=0)
-    locale: str = Field(default="fa", max_length=8)
+    locale: str = Field(default="en", max_length=8)
 
 
 class UserOut(BaseModel):

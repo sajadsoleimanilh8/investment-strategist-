@@ -36,7 +36,12 @@ any answer containing a number that does not trace back to the context. Local
 model is stock `llama3.2:3b` via Ollama; `LOCAL_LLM_PROVIDER=fake` is the
 offline test double.
 
-Remaining: the Telegram bot (phase 6) and polish / deployment (phase 7).
+**Phase 6:** the Telegram bot — an onboarding conversation, ten commands, and
+one inline-keyboard router. It is a thin delivery layer: message bodies are
+built by pure functions in `app/bot/views.py` from engine output, and `/ask`
+calls the same `app/api/ask.py` pipeline the HTTP route does.
+
+Remaining: polish, rate limiting and deployment (phase 7).
 
 - Full spec: [`docs/SPEC.md`](docs/SPEC.md)
 - Phase plan: [`docs/ROADMAP.md`](docs/ROADMAP.md)
@@ -83,8 +88,9 @@ app/
               simulation, time machine, decision, market analytics, education
   market/     MarketDataProvider abstraction + AlphaVantage/CoinGecko/Mock
   ai/         local + remote LLM, intent parser, synthesizer, safety, prompts
-  api/        FastAPI routes
-  bot/        Telegram: handlers, inline keyboards, user-facing messages, formatting
+  api/        FastAPI routes + ask.py (the shared question pipeline) + deps.py
+  bot/        Telegram: handlers, callback router, onboarding conversation,
+              inline keyboards, pure view builders, copy, formatting
 tests/        unit/ (engine, models, repos, config)  +  api/
 scripts/      seed_demo_user, fetch_market_snapshots
 migrations/   Alembic environment + versions
@@ -155,6 +161,22 @@ that does not trace back to the context — discards the model's text entirely
 and renders the verified figures instead. A hallucinated number cannot reach a
 user. Local model: stock `llama3.2:3b` via Ollama; set `LOCAL_LLM_PROVIDER=fake`
 for the deterministic offline double that the tests use.
+
+## The Telegram bot
+
+```
+TELEGRAM_BOT_TOKEN=... python -m app.bot.main
+```
+
+Commands: `/start /help /profile /health /budget /goals /simulate /market
+/watchlist /learn /ask`. `/start` puts a new user into the onboarding
+conversation and a returning one back at the menu.
+
+Only `/ask` and a free-text simulation reach a model (SPEC section 23);
+`/health`, `/budget`, `/goals`, `/profile`, `/market` and `/learn` are
+deterministic end to end, and a test asserts they never call the synthesizer.
+With Ollama stopped, `/ask` degrades to the verified figures and everything
+else is unaffected.
 
 ## Product principle
 

@@ -120,8 +120,12 @@ def test_safety_reaches_no_network():
     assert not [name for name in imports if name.split(".")[0] in LLM_MODULES]
 
 
-def test_only_the_ai_route_imports_the_synthesizer():
-    """One entry point into the model, so one place safety can be bypassed."""
+def test_only_the_ask_pipeline_imports_the_synthesizer():
+    """One entry point into the model, so one place safety can be bypassed.
+
+    Both delivery surfaces (HTTP route and Telegram bot) go through
+    `app/api/ask.py`; neither may reach the synthesizer on its own.
+    """
     importers = [
         path.relative_to(APP).as_posix()
         for path in APP.rglob("*.py")
@@ -129,7 +133,7 @@ def test_only_the_ai_route_imports_the_synthesizer():
         and "app.ai.synthesizer" in imported_modules(path)
     ]
 
-    assert importers == ["api/routes/ai.py"], f"unexpected synthesizer importers: {importers}"
+    assert importers == ["api/ask.py"], f"unexpected synthesizer importers: {importers}"
 
 
 def test_every_synthesizer_return_goes_through_safety():
@@ -178,11 +182,54 @@ def test_every_answer_carries_a_safety_report():
         assert result["used_context"] == context
 
 
-def test_the_ai_route_is_the_only_place_the_transcript_is_written():
+def test_the_ask_pipeline_is_the_only_place_the_transcript_is_written():
     writers = [
         path.relative_to(APP).as_posix()
         for path in APP.rglob("*.py")
         if "app.repositories.chat" in imported_modules(path)
         and path.name != "__init__.py"          # the package re-export is not a writer
     ]
-    assert writers == ["api/routes/ai.py"], f"unexpected transcript writers: {writers}"
+    assert writers == ["api/ask.py"], f"unexpected transcript writers: {writers}"
+
+
+# --- phase 6: the bot is a delivery layer, nothing more ------------------
+
+BOT = APP / "bot"
+
+
+def test_the_bot_never_reaches_persistence_models_directly():
+    """Handlers read and write through repositories, never raw ORM queries."""
+    offenders = {}
+    for path in BOT.rglob("*.py"):
+        forbidden = [
+            name for name in imported_modules(path)
+            if name.startswith("sqlalchemy.orm.Query") or name == "app.db.base"
+        ]
+        if forbidden:
+            offenders[path.name] = forbidden
+    assert offenders == {}, offenders
+
+
+def test_view_builders_import_no_telegram():
+    """views.py is pure data-in/string-out, which is what makes it testable."""
+    imports = imported_modules(BOT / "views.py")
+    assert not [name for name in imports if name.split(".")[0] == "telegram"]
+
+
+def test_the_bot_reaches_the_model_only_through_the_ask_pipeline():
+    """No handler may call a synthesizer or an LLM client itself."""
+    for path in BOT.rglob("*.py"):
+        imports = imported_modules(path)
+        assert not [n for n in imports if n.split(".")[0] in LLM_MODULES], path.name
+        assert "app.ai.synthesizer" not in imports, path.name
+        assert not [n for n in imports if n.startswith(("app.ai.local", "app.ai.remote"))]
+
+
+def test_nothing_below_delivery_imports_the_bot():
+    """`app/bot` is a leaf: services, ai, market and repositories never see it."""
+    importers = []
+    for package in ("services", "ai", "market", "repositories", "models", "core"):
+        for path in (APP / package).rglob("*.py"):
+            if [n for n in imported_modules(path) if n.startswith("app.bot")]:
+                importers.append(path.relative_to(APP).as_posix())
+    assert importers == [], f"the bot leaked downwards: {importers}"

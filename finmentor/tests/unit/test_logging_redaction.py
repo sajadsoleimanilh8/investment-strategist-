@@ -81,3 +81,40 @@ def test_query_parameters_are_redacted_in_the_access_log(client, caplog):
     assert "secret-value" not in logged
     assert "30000000" not in logged
     assert SECRET_MASK in logged
+
+
+# --- credentials inside free text ---------------------------------------
+#
+# `redact` is key-driven, which used to mean a bare string sailed through it
+# untouched. The bot's error handler logs `str(exception)`, and a failed
+# connection quotes the DSN it failed on — password included.
+
+def test_a_password_in_a_connection_string_is_masked():
+    masked = redact("could not connect to postgresql://finmentor:hunter2@db:5432/x")
+
+    assert "hunter2" not in masked
+    assert "finmentor" in masked          # the username stays; it is useful
+
+
+def test_a_bearer_token_in_a_message_is_masked():
+    assert "sk-abc123def456" not in redact("Authorization: Bearer sk-abc123def456")
+
+
+def test_an_api_key_assignment_is_masked():
+    assert "supersecret" not in redact("api_key=supersecret failed")
+
+
+def test_a_telegram_bot_token_is_masked():
+    token = "123456789:AAHfakefakefakefakefakefakefakefake12"
+    assert token not in redact(f"getUpdates failed for {token}")
+
+
+def test_ordinary_prose_is_left_alone():
+    text = "the user asked about their emergency fund"
+    assert redact(text) == text
+
+
+def test_strings_nested_in_a_payload_are_scrubbed_too():
+    masked = redact({"detail": "dsn postgresql://u:p@h/db is unreachable"})
+
+    assert "p@h" not in masked["detail"]

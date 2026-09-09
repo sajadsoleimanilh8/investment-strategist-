@@ -15,7 +15,7 @@ def get_by_telegram_id(db: Session, telegram_id: int) -> User | None:
     return db.scalar(select(User).where(User.telegram_id == telegram_id))
 
 
-def create(db: Session, *, telegram_id: int, locale: str = "fa",
+def create(db: Session, *, telegram_id: int, locale: str = "en",
            risk_profile: str | None = None) -> User:
     user = User(telegram_id=telegram_id, locale=locale, risk_profile=risk_profile)
     db.add(user)
@@ -23,7 +23,7 @@ def create(db: Session, *, telegram_id: int, locale: str = "fa",
     return user
 
 
-def get_or_create(db: Session, *, telegram_id: int, locale: str = "fa") -> User:
+def get_or_create(db: Session, *, telegram_id: int, locale: str = "en") -> User:
     user = get_by_telegram_id(db, telegram_id)
     if user is None:
         user = create(db, telegram_id=telegram_id, locale=locale)

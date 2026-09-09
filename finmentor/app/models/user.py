@@ -28,7 +28,7 @@ class User(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    locale: Mapped[str] = mapped_column(String(8), default="fa")
+    locale: Mapped[str] = mapped_column(String(8), default="en")
     risk_profile: Mapped[str | None] = mapped_column(String(16), default=None)
 
     profile: Mapped[FinancialProfile | None] = relationship(

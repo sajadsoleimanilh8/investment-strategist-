@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.core.config import settings
@@ -39,6 +40,28 @@ ID_MASK = "<id>"
 
 _MAX_DEPTH = 6
 
+#: Credentials that arrive inside free text rather than under a key — the
+#: password in a connection string, or a bearer token in an exception message.
+#: `redact` is key-driven, so a bare string used to sail straight through it,
+#: which is how a DSN can end up in a log line from an error handler.
+_DSN_CREDENTIALS = re.compile(r"(?<=://)([^\s:/@]+):([^\s:/@]+)(?=@)")
+_LABELLED_SECRET = re.compile(
+    r"\b(bearer|token|api[_-]?key)(\s*[:=]\s*|\s+)(\S+)", re.IGNORECASE
+)
+_TELEGRAM_TOKEN = re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{30,}\b")
+
+
+def scrub_text(text: str) -> str:
+    """Mask credentials embedded in an arbitrary string.
+
+    For messages we did not build ourselves — exception text above all, which
+    routinely quotes the connection string that failed. The username survives
+    (it is useful in a log); only the secret half is masked.
+    """
+    text = _DSN_CREDENTIALS.sub(rf"\1:{SECRET_MASK}", text)
+    text = _LABELLED_SECRET.sub(rf"\1\2{SECRET_MASK}", text)
+    return _TELEGRAM_TOKEN.sub(SECRET_MASK, text)
+
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -67,6 +90,8 @@ def redact(data: Any, _depth: int = 0, _in_financial: bool = False) -> Any:
         return "<truncated>"
     if _in_financial and not isinstance(data, (dict, list, tuple, bool)) and data is not None:
         return AMOUNT_MASK
+    if isinstance(data, str):
+        return scrub_text(data)
     if isinstance(data, dict):
         out: dict[Any, Any] = {}
         for key, value in data.items():

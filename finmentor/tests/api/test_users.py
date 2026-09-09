@@ -3,12 +3,12 @@ from app.repositories import users as users_repo
 
 
 def test_create_user_persists_and_returns_it(client, db):
-    response = client.post("/api/users", json={"telegram_id": 555_001, "locale": "fa"})
+    response = client.post("/api/users", json={"telegram_id": 555_001, "locale": "en"})
 
     assert response.status_code == 201
     body = response.json()
     assert body["telegram_id"] == 555_001
-    assert body["locale"] == "fa"
+    assert body["locale"] == "en"
     assert body["risk_profile"] is None
     assert body["id"] > 0
 
@@ -23,9 +23,9 @@ def test_created_user_is_readable_back(client):
     assert response.json() == created
 
 
-def test_locale_defaults_to_persian(client):
+def test_locale_defaults_to_english(client):
     body = client.post("/api/users", json={"telegram_id": 555_003}).json()
-    assert body["locale"] == "fa"
+    assert body["locale"] == "en"
 
 
 def test_duplicate_telegram_id_is_rejected(client):

@@ -113,12 +113,21 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
 - **Done when:** `/ask` explains a real health score / simulation with all three
   fallback tiers covered by tests.
 
-## Phase 6 — Telegram
-- [ ] Onboarding conversation (income -> expenses -> position -> goals -> risk)
-- [ ] All commands + inline-keyboard callback router (`app/bot/keyboards.py`)
-- [ ] English copy in `app/bot/messages.py`; number formatting via `formatting.py`
-- [ ] Wire each command to services/AI; loading states ("Calculating…")
-- [ ] Port/retire legacy `bot/`, `main.py`, top-level `config.py`
+## Phase 6 — Telegram  `[x]`
+- [x] Onboarding conversation (income -> 8 expense categories -> position ->
+      first goal -> 3 risk questions). Nothing is written until the last step,
+      so an abandoned run leaves no half-built profile.
+- [x] All commands + one inline-keyboard callback router. Every payload is
+      `"<area>:<action>[:<arg>]"`, decoded in a single `parse_cb`.
+- [x] English copy in `app/bot/messages.py`; every figure rendered through
+      `formatting.py` (currency via `settings.currency_symbol`)
+- [x] Each command wired to `app/services`; `/ask` and free-text simulations go
+      through `app/api/ask.py`, the pipeline the HTTP route also uses. Blocking
+      work runs in `asyncio.to_thread`; anything slow says "Calculating…" first.
+- [x] Port/retire legacy `bot/`, `main.py`, top-level `config.py` — deleted on
+      2026-09-08 once everything had been ported into `app/` (see the note below)
+- [x] `app/bot/views.py` is pure (data in, string out, no Telegram import), so
+      every message body is unit-tested against real engine output
 - **Done when:** the full Definition-of-Done flow works from Telegram in DEMO_MODE.
 
 ## Phase 7 — Website

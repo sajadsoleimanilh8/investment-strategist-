@@ -81,3 +81,17 @@ def client(db) -> TestClient:
             yield test_client
     finally:
         fastapi_app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def bot_db(db_engine, monkeypatch):
+    """Point `app.bot.context.session()` at the test database.
+
+    The bot opens its own sessions (it is not a FastAPI request, so there is no
+    dependency to override), which is exactly the thing to redirect here.
+    """
+    import app.bot.context as bot_context
+
+    factory = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
+    monkeypatch.setattr(bot_context, "SessionLocal", factory)
+    return factory

@@ -54,7 +54,7 @@ def _goal_payloads(today: date | None = None) -> list[GoalIn]:
 def seed_demo_user(db: Session, *, telegram_id: int = DEMO_TELEGRAM_ID,
                    period: str | None = None) -> int:
     """Write the demo profile + goals through the repositories. Returns user id."""
-    user = users_repo.get_or_create(db, telegram_id=telegram_id, locale="fa")
+    user = users_repo.get_or_create(db, telegram_id=telegram_id, locale="en")
     profiles_repo.upsert(db, user, FinancialProfileIn(**DEMO_PROFILE), period=period)
 
     existing = {goal.name: goal for goal in goals_repo.list_for_user(db, user.id)}
