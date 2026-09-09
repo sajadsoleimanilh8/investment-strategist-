@@ -135,6 +135,9 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
       the right feature. The precise paths stay stateless and unchanged; the
       canned capabilities answer survives as the floor when the model is down.
 - **Done when:** the full Definition-of-Done flow works from Telegram in DEMO_MODE.
+  *Verified live on 2026-09-09 against a real bot token, Postgres and
+  `llama3.2:3b`: the flow runs end to end in Telegram itself, not just
+  in-process.*
 
 ## Local model — evaluation, and the fine-tune we did not do  `[x]`
 - [x] 22-probe evaluation set built from **real** engine output for four
