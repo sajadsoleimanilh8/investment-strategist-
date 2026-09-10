@@ -52,9 +52,15 @@ def _goal_payloads(today: date | None = None) -> list[GoalIn]:
 
 
 def seed_demo_user(db: Session, *, telegram_id: int = DEMO_TELEGRAM_ID,
-                   period: str | None = None) -> int:
-    """Write the demo profile + goals through the repositories. Returns user id."""
-    user = users_repo.get_or_create(db, telegram_id=telegram_id, locale="en")
+                   period: str | None = None, user=None) -> int:
+    """Write the demo profile + goals through the repositories. Returns user id.
+
+    `user` attaches the demo figures to an existing row instead of the Telegram
+    demo account — the web tests need a signed-in user who has onboarded, and
+    that user was created by a signup, not by the bot.
+    """
+    if user is None:
+        user = users_repo.get_or_create(db, telegram_id=telegram_id, locale="en")
     profiles_repo.upsert(db, user, FinancialProfileIn(**DEMO_PROFILE), period=period)
 
     existing = {goal.name: goal for goal in goals_repo.list_for_user(db, user.id)}

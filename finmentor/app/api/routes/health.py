@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import DbSession, load_twin, require_user
+from app.api.deps import DbSession, OwnedUserId, load_twin, require_user
 from app.repositories import education as education_repo
 from app.schemas.health import FinancialDNAOut, HealthScoreOut
 from app.services.financial_dna import build_dna
@@ -25,11 +25,11 @@ router = APIRouter(prefix="/api", tags=["health"],
 
 
 @router.get("/health/{user_id}", response_model=HealthScoreOut)
-def get_health_score(user_id: int, db: DbSession) -> HealthScoreOut:
+def get_health_score(user_id: OwnedUserId, db: DbSession) -> HealthScoreOut:
     return compute_health_score(load_twin(db, user_id))
 
 
 @router.get("/health/{user_id}/dna", response_model=FinancialDNAOut)
-def get_financial_dna(user_id: int, db: DbSession) -> FinancialDNAOut:
+def get_financial_dna(user_id: OwnedUserId, db: DbSession) -> FinancialDNAOut:
     twin = load_twin(db, user_id)
     return build_dna(twin, completed_topics=education_repo.count_completed(db, user_id))

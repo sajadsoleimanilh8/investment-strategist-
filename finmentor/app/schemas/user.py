@@ -10,9 +10,16 @@ class UserIn(BaseModel):
 
 
 class UserOut(BaseModel):
+    """A user seen over HTTP.
+
+    `telegram_id` and `email` are both optional because a row carries at least
+    one of them, not both: a bot user has no email, a web signup has no
+    telegram id. `password_hash` is not here and must never be.
+    """
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    telegram_id: int
+    telegram_id: int | None = None
+    email: str | None = None
     locale: str
     risk_profile: str | None = None

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.api.deps import DbSession, load_user, require_user
+from app.api.deps import DbSession, OwnedUserId, load_user, require_user
 from app.market import cache
 from app.models.market import MarketAsset
 from app.repositories import market as market_repo
@@ -70,7 +70,7 @@ def get_asset_trend(symbol: str, db: DbSession, days: int = DEFAULT_DAYS) -> Tre
 
 
 @router.get("/market/watchlist/{user_id}", response_model=WatchlistOut)
-def get_watchlist(user_id: int, db: DbSession, days: int = DEFAULT_DAYS) -> WatchlistOut:
+def get_watchlist(user_id: OwnedUserId, db: DbSession, days: int = DEFAULT_DAYS) -> WatchlistOut:
     """The user's watched symbols, ranked by recent momentum (not a forecast)."""
     load_user(db, user_id)
     reports = [
@@ -83,7 +83,7 @@ def get_watchlist(user_id: int, db: DbSession, days: int = DEFAULT_DAYS) -> Watc
 
 @router.post("/market/watchlist/{user_id}", response_model=WatchlistOut,
              status_code=status.HTTP_201_CREATED)
-def add_to_watchlist(user_id: int, payload: WatchlistIn, db: DbSession) -> WatchlistOut:
+def add_to_watchlist(user_id: OwnedUserId, payload: WatchlistIn, db: DbSession) -> WatchlistOut:
     """Add a symbol. Idempotent — watching something twice is not an error."""
     load_user(db, user_id)
     asset = market_repo.get_asset(db, payload.symbol)
@@ -99,7 +99,7 @@ def add_to_watchlist(user_id: int, payload: WatchlistIn, db: DbSession) -> Watch
 
 @router.delete("/market/watchlist/{user_id}/{symbol}",
                status_code=status.HTTP_204_NO_CONTENT)
-def remove_from_watchlist(user_id: int, symbol: str, db: DbSession) -> Response:
+def remove_from_watchlist(user_id: OwnedUserId, symbol: str, db: DbSession) -> Response:
     load_user(db, user_id)
     market_repo.remove_from_watchlist(db, user_id, symbol)
     db.commit()

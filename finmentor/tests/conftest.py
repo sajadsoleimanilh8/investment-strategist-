@@ -22,6 +22,12 @@ os.environ.setdefault("ENABLE_SCHEDULER", "false")
 # app/ai/local_llm.py. Remote stays disabled; tests that want the hybrid tier
 # monkeypatch `app.ai.remote_llm.generate` / `is_enabled`.
 os.environ.setdefault("LOCAL_LLM_PROVIDER", "fake")
+# The rate limiters are real infrastructure and every test arrives from the
+# same client address, so a suite that exercises login twenty times would trip
+# a limit meant for a human. 0 disables them; `test_rate_limit.py` turns one
+# back on and asserts it works.
+os.environ.setdefault("AUTH_RATE_LIMIT_PER_MINUTE", "0")
+os.environ.setdefault("ASK_RATE_LIMIT_PER_MINUTE", "0")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -87,8 +93,26 @@ def bot_db(db_engine, monkeypatch):
 
 
 @pytest.fixture
-def client(db) -> TestClient:
-    """API client authenticated as whoever the request is about.
+def current_user(db):
+    """A real `users` row standing in for whoever is signed in.
+
+    A real row, not a stand-in object: routes that write rows keyed on the
+    caller (`education_progress`, `chat_sessions`) need a foreign key that
+    resolves, and an id of 0 fails that at the database rather than in the code
+    under test.
+    """
+    from app.repositories import users as users_repo
+
+    user = users_repo.create_web_user(
+        db, email="tests@finmentor.local", password_hash="x"
+    )
+    db.commit()
+    return user
+
+
+@pytest.fixture
+def client(db, current_user, monkeypatch) -> TestClient:
+    """API client authenticated as `current_user`, with ownership waived.
 
     The suite predates web auth and is about business logic, not about who is
     allowed to call what. Rather than thread a token through two hundred
@@ -96,16 +120,28 @@ def client(db) -> TestClient:
     these tests keep testing what they were written to test.
 
     The guard itself is tested for real in `tests/api/test_auth.py`, which uses
-    `raw_client` and asserts the 401s and the cross-user 403s directly.
+    `raw_client`, mints real tokens, and asserts the 401s and cross-user 403s.
     """
     from app.api import deps
-    from app.models.user import User
 
     fastapi_app.dependency_overrides[get_db] = lambda: db
-    fastapi_app.dependency_overrides[deps.require_user] = lambda: User(
-        id=0, email="tests@finmentor.local", locale="en"
-    )
-    fastapi_app.dependency_overrides[deps.owned_user_id] = lambda user_id: user_id
+    fastapi_app.dependency_overrides[deps.require_user] = lambda: current_user
+    # Annotated, not a bare lambda: FastAPI coerces a path parameter using the
+    # dependency's own signature, so an unannotated override hands the route a
+    # *string*. SQLite tolerates that and Postgres does not, which makes it the
+    # kind of bug that only appears in CI.
+    def owns_anything(user_id: int) -> int:
+        return user_id
+
+    fastapi_app.dependency_overrides[deps.owned_user_id] = owns_anything
+
+    # `assert_owns` guards the routes that carry a user id in the *body*
+    # (`POST /goals`, `/simulations`, `/ai/ask`). It is a plain call inside the
+    # handler, not a dependency, so it cannot be overridden — it has to be
+    # patched where each module bound the name at import.
+    for module in ("goals", "simulations", "ai"):
+        monkeypatch.setattr(f"app.api.routes.{module}.assert_owns",
+                            lambda user, user_id: user_id)
     try:
         with TestClient(fastapi_app) as test_client:
             yield test_client

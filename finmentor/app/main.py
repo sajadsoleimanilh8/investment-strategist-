@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import ALL_ROUTERS
 from app.core.config import settings
@@ -48,6 +49,16 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(title="FinMentor API", version="0.1.0", lifespan=lifespan)
+    # The browser client is a separate origin from the API. Credentials are
+    # bearer tokens in a header, not cookies, so this needs no
+    # `allow_credentials` — and origins stay an explicit list, never "*".
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
     for router in ALL_ROUTERS:
         app.include_router(router)
 

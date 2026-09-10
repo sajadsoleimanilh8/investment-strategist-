@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DbSession, require_user
+from app.api.deps import DbSession, OwnedUserId, require_user
 from app.repositories import users as users_repo
 from app.schemas.user import UserIn, UserOut
 
@@ -26,7 +26,7 @@ def create_user(payload: UserIn, db: DbSession) -> UserOut:
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
-def get_user(user_id: int, db: DbSession) -> UserOut:
+def get_user(user_id: OwnedUserId, db: DbSession) -> UserOut:
     user = users_repo.get(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")

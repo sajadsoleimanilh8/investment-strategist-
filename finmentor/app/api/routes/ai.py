@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 
 from app.api import ask as ask_pipeline
-from app.api.deps import DbSession, require_user
+from app.api.deps import CurrentUser, DbSession, OwnedUserId, assert_owns, require_user
 from app.schemas.ai import AskRequest, AskResponse
 
 #: Guarded at the router, not per route: a route added here later is
@@ -18,10 +18,11 @@ router = APIRouter(prefix="/api", tags=["ai"],
 
 
 @router.post("/ai/ask", response_model=AskResponse)
-def ask(payload: AskRequest, db: DbSession) -> AskResponse:
+def ask(payload: AskRequest, db: DbSession, current_user: CurrentUser) -> AskResponse:
+    assert_owns(current_user, payload.user_id)
     return ask_pipeline.answer_question(db, payload.user_id, payload.question)
 
 
 @router.get("/ai/transcript/{user_id}", status_code=status.HTTP_200_OK)
-def get_transcript(user_id: int, db: DbSession) -> list[dict]:
+def get_transcript(user_id: OwnedUserId, db: DbSession) -> list[dict]:
     return ask_pipeline.transcript(db, user_id)

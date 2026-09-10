@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DbSession, load_twin, load_user, require_user
+from app.api.deps import CurrentUser, DbSession, OwnedUserId, assert_owns, load_twin, load_user, require_user
 from app.models.goal import FinancialGoal
 from app.repositories import goals as goals_repo
 from app.schemas.finance import GoalCreate, GoalIn, GoalOut
@@ -38,13 +38,14 @@ def _to_out(db, goal: FinancialGoal) -> GoalOut:
 
 
 @router.get("/goals/{user_id}", response_model=list[GoalOut])
-def list_goals(user_id: int, db: DbSession, active_only: bool = True):
+def list_goals(user_id: OwnedUserId, db: DbSession, active_only: bool = True):
     load_user(db, user_id)
     return [_to_out(db, goal) for goal in goals_repo.list_for_user(db, user_id, active_only=active_only)]
 
 
 @router.post("/goals", response_model=GoalOut, status_code=status.HTTP_201_CREATED)
-def create_goal(payload: GoalCreate, db: DbSession):
+def create_goal(payload: GoalCreate, db: DbSession, current_user: CurrentUser):
+    assert_owns(current_user, payload.user_id)
     load_user(db, payload.user_id)
     goal = goals_repo.create(db, payload.user_id, GoalIn(**payload.model_dump(exclude={"user_id"})))
     db.commit()

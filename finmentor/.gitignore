@@ -20,3 +20,9 @@ adapter/
 merged/
 scripts/ft/probe_report.json
 scripts/ft/probe_*.json
+
+# frontend
+web/node_modules/
+web/dist/
+web/.env
+web/tsconfig.tsbuildinfo

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, load_twin, load_user, require_user
+from app.api.deps import DbSession, OwnedUserId, load_twin, load_user, require_user
 from app.repositories import profiles as profiles_repo
 from app.schemas.finance import FinancialProfileIn, FinancialTwinOut
 
@@ -24,13 +24,13 @@ PeriodQuery = Query(
 
 
 @router.get("/financial-profile/{user_id}", response_model=FinancialTwinOut)
-def get_financial_profile(user_id: int, db: DbSession, period: str | None = PeriodQuery):
+def get_financial_profile(user_id: OwnedUserId, db: DbSession, period: str | None = PeriodQuery):
     return load_twin(db, user_id, period=period)
 
 
 @router.put("/financial-profile/{user_id}", response_model=FinancialTwinOut)
 def put_financial_profile(
-    user_id: int,
+    user_id: OwnedUserId,
     payload: FinancialProfileIn,
     db: DbSession,
     period: str | None = PeriodQuery,

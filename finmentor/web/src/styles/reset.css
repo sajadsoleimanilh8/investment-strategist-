@@ -1,0 +1,21 @@
+/* A minimal reset. Nothing here expresses a design decision — it only removes
+   the browser defaults that fight *any* design. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  /* Deliberately the browser's own font stack. Typography is a design
+     decision and this phase has not made one. */
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+img, svg { max-width: 100%; height: auto; }
+
+/* Forms do not inherit fonts by default, which is a bug, not a style. */
+input, button, select, textarea { font: inherit; }
+
+table { border-collapse: collapse; }
+
+[hidden] { display: none !important; }
