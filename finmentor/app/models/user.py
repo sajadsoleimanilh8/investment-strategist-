@@ -24,10 +24,22 @@ class User(Base, TimestampMixin):
             "risk_profile IS NULL OR risk_profile IN ('conservative', 'moderate', 'aggressive')",
             name="ck_users_risk_profile",
         ),
+        # Two ways in, and a row must have at least one of them. A Telegram
+        # user never authenticates; a web user has no telegram id. The same row
+        # can hold both once the two identities are linked.
+        CheckConstraint(
+            "telegram_id IS NOT NULL OR email IS NOT NULL",
+            name="ck_users_has_an_identity",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    telegram_id: Mapped[int | None] = mapped_column(
+        BigInteger, unique=True, index=True, default=None
+    )
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True,
+                                              default=None)
+    password_hash: Mapped[str | None] = mapped_column(String(255), default=None)
     locale: Mapped[str] = mapped_column(String(8), default="en")
     risk_profile: Mapped[str | None] = mapped_column(String(16), default=None)
 

@@ -9,10 +9,14 @@ __pycache__/
 # bot runtime log
 bot.log
 
-# fine-tuning: the scripts and the eval report are committed, the artefacts are not
+# fine-tuning: the scripts, the README and the Modelfile are committed; the
+# datasets, adapters and weights are not
 data/ft/
 models/*.gguf
 models/*.bin
 outputs/
+*.lora
+adapter/
+merged/
 scripts/ft/probe_report.json
 scripts/ft/probe_*.json

@@ -57,15 +57,39 @@ class Settings(BaseSettings):
     remote_llm_api_key: str = ""
     remote_llm_timeout_seconds: float = 8.0
 
+    # web auth. `jwt_secret` has a development default so the test suite and a
+    # local run need no setup; `test_a_production_run_refuses_the_dev_secret`
+    # asserts that shipping it is impossible.
+    jwt_secret: str = "dev-only-not-a-secret-please-replace-me"
+    access_token_ttl_minutes: int = 30
+    refresh_token_ttl_days: int = 14
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
+    #: per-IP on signup/login, per-user on /ai/ask. 0 disables the limiter.
+    auth_rate_limit_per_minute: int = 10
+    ask_rate_limit_per_minute: int = 20
+
     # budget engine default guideline (NOT presented as universally correct)
     budget_split: dict[str, float] = Field(
         default_factory=lambda: {"needs": 0.5, "wants": 0.3, "savings": 0.2}
     )
 
 
+    @property
+    def jwt_secret_is_default(self) -> bool:
+        return self.jwt_secret == "dev-only-not-a-secret-please-replace-me"
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not settings.demo_mode and settings.jwt_secret_is_default:
+        raise RuntimeError(
+            "JWT_SECRET is still the development default. Set a real one "
+            "before running outside DEMO_MODE."
+        )
+    return settings
 
 
 settings = get_settings()

@@ -1,13 +1,16 @@
 """users routes (spec section 22): POST /api/users, GET /api/users/{id}."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, require_user
 from app.repositories import users as users_repo
 from app.schemas.user import UserIn, UserOut
 
-router = APIRouter(prefix="/api", tags=["users"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["users"],
+                   dependencies=[Depends(require_user)])
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)

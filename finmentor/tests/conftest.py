@@ -73,17 +73,6 @@ def db(db_engine) -> Session:
 
 
 @pytest.fixture
-def client(db) -> TestClient:
-    """API client whose requests run against the test database."""
-    fastapi_app.dependency_overrides[get_db] = lambda: db
-    try:
-        with TestClient(fastapi_app) as test_client:
-            yield test_client
-    finally:
-        fastapi_app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.fixture
 def bot_db(db_engine, monkeypatch):
     """Point `app.bot.context.session()` at the test database.
 
@@ -95,3 +84,41 @@ def bot_db(db_engine, monkeypatch):
     factory = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
     monkeypatch.setattr(bot_context, "SessionLocal", factory)
     return factory
+
+
+@pytest.fixture
+def client(db) -> TestClient:
+    """API client authenticated as whoever the request is about.
+
+    The suite predates web auth and is about business logic, not about who is
+    allowed to call what. Rather than thread a token through two hundred
+    assertions, `require_user` and the ownership guard are overridden here — so
+    these tests keep testing what they were written to test.
+
+    The guard itself is tested for real in `tests/api/test_auth.py`, which uses
+    `raw_client` and asserts the 401s and the cross-user 403s directly.
+    """
+    from app.api import deps
+    from app.models.user import User
+
+    fastapi_app.dependency_overrides[get_db] = lambda: db
+    fastapi_app.dependency_overrides[deps.require_user] = lambda: User(
+        id=0, email="tests@finmentor.local", locale="en"
+    )
+    fastapi_app.dependency_overrides[deps.owned_user_id] = lambda user_id: user_id
+    try:
+        with TestClient(fastapi_app) as test_client:
+            yield test_client
+    finally:
+        fastapi_app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def raw_client(db) -> TestClient:
+    """The API exactly as a browser meets it: no overrides, real guards."""
+    fastapi_app.dependency_overrides[get_db] = lambda: db
+    try:
+        with TestClient(fastapi_app) as test_client:
+            yield test_client
+    finally:
+        fastapi_app.dependency_overrides.clear()

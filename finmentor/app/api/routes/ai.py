@@ -5,13 +5,16 @@ bot so there is exactly one implementation of the architectural rule.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from app.api import ask as ask_pipeline
-from app.api.deps import DbSession
+from app.api.deps import DbSession, require_user
 from app.schemas.ai import AskRequest, AskResponse
 
-router = APIRouter(prefix="/api", tags=["ai"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["ai"],
+                   dependencies=[Depends(require_user)])
 
 
 @router.post("/ai/ask", response_model=AskResponse)

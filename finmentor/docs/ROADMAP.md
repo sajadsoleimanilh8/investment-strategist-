@@ -156,6 +156,13 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
   every base-model bump; taking that on for defects a better prompt payload
   removed would be paying rent on nothing. The path to do it later, and what it
   would plausibly buy, is written up in `scripts/ft/README.md`.
+- [x] **The fine-tune was built anyway (2026-09-10) and lost.** QLoRA r=16 on
+      584 generated pairs, 15.7 min / 4.8 GB on the 5070 Ti, eval loss 0.0497.
+      Stock scored 21.0/22, `finmentor-3b` 17.7/22 — grounding and verdicts are
+      fine, but it over-fit the composer's templates and collapsed the explain
+      path into the chat shape. Pipeline committed and repeatable
+      (`scripts/ft/`), weights not shipped. `LOCAL_LLM_MODEL` stays
+      `llama3.2:3b`. Full write-up in `scripts/ft/README.md`.
 - **`LOCAL_LLM_MODEL` stays a plain env var.** No model tag is hard-coded
   outside `config.py`, and a test asserts it.
 

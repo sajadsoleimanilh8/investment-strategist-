@@ -134,6 +134,14 @@ def numbers_in_context(context: Any) -> list[float]:
     elif isinstance(context, (int, float)):
         numbers.append(float(context))
         numbers.append(float(context) * 100)      # a stored rate quoted as a percent
+        # ...and the mirror, but only for a value that could *be* a percentage.
+        # `numbers_in_text` reads "5%" as both 5 and 0.05, so a context holding
+        # `progress_pct: 5.0` must ground 0.05 or quoting its own figure looks
+        # invented. Values at or below 1 are already fractions and need no
+        # mirror — adding one would scatter near-zero numbers through the
+        # grounding set and quietly make a claimed "0" acceptable.
+        if abs(float(context)) > 1:
+            numbers.append(float(context) / 100)
         # The magnitude, because `numbers_in_text` reads no sign: "$-36,000,000"
         # comes back as 36,000,000. Without this a purchase that overdraws
         # someone flags its own deterministic rendering as invented, and every
@@ -168,7 +176,11 @@ def is_grounded(value: float, context_numbers: list[float]) -> bool:
     for candidate in context_numbers:
         if abs(value - candidate) <= NUMBER_TOLERANCE * max(abs(candidate), 1.0):
             return True
-        if round(candidate, precision) == value:
+        # Rounding may not manufacture a zero. `round(0.0182, 0)` is 0.0, so
+        # without this a model claiming a component is "worth 0" is grounded by
+        # any small number anywhere in the context — which is the exact defect
+        # the ordinal exemption was removed to catch.
+        if round(candidate, precision) == value and (value != 0 or candidate == 0):
             return True
     return False
 

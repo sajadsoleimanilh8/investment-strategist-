@@ -10,10 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, ValidationError
 
-from app.api.deps import DbSession, load_twin, load_user
+from app.api.deps import DbSession, load_twin, load_user, require_user
 from app.repositories import goals as goals_repo
 from app.repositories import simulations as simulations_repo
 from app.schemas.simulation import WhatIfParams
@@ -21,7 +21,10 @@ from app.services.decision_simulator import evaluate_purchase
 from app.services.simulation_engine import run_what_if
 from app.services.time_machine import compare_paths
 
-router = APIRouter(prefix="/api", tags=["simulations"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["simulations"],
+                   dependencies=[Depends(require_user)])
 
 DEFAULT_TIME_MACHINE_HORIZON = 36
 

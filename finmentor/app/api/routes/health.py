@@ -10,15 +10,18 @@ Both are pure deterministic engine calls — no LLM anywhere on this path.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.deps import DbSession, load_twin
+from app.api.deps import DbSession, load_twin, require_user
 from app.repositories import education as education_repo
 from app.schemas.health import FinancialDNAOut, HealthScoreOut
 from app.services.financial_dna import build_dna
 from app.services.health_score import compute_health_score
 
-router = APIRouter(prefix="/api", tags=["health"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["health"],
+                   dependencies=[Depends(require_user)])
 
 
 @router.get("/health/{user_id}", response_model=HealthScoreOut)

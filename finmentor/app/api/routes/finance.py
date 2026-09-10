@@ -5,13 +5,16 @@ what the rest of the product reads.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DbSession, load_twin, load_user
+from app.api.deps import DbSession, load_twin, load_user, require_user
 from app.repositories import profiles as profiles_repo
 from app.schemas.finance import FinancialProfileIn, FinancialTwinOut
 
-router = APIRouter(prefix="/api", tags=["finance"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["finance"],
+                   dependencies=[Depends(require_user)])
 
 PeriodQuery = Query(
     default=None,

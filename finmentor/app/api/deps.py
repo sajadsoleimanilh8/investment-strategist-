@@ -7,12 +7,15 @@ loading code.
 from __future__ import annotations
 
 import re
+import logging
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.ai.intent import ParsedIntent
+from app.core import security
+from app.core.config import settings
 from app.db.session import get_db  # noqa: F401  re-exported for routes
 from app.market import cache as market_cache
 from app.models.finance import FinancialProfile
@@ -32,6 +35,8 @@ from app.services.goal_engine import progress_pct as goal_progress_pct
 from app.services.financial_twin import build_twin
 from app.services.health_score import compute_health_score
 from app.services.simulation_engine import run_what_if
+
+log = logging.getLogger("finmentor.api")
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -263,3 +268,118 @@ def build_ai_context(
         return _market_context(db, user_id, parsed), True
 
     return {"available_help": list(CAPABILITIES)}, False
+
+
+# --- web authentication --------------------------------------------------
+#
+# The bot never comes through here: it resolves a user from the Telegram update
+# and calls the pipeline functions directly. These dependencies exist for the
+# browser client, and guarding a route cannot break the bot.
+
+def require_user(
+    db: DbSession,
+    authorization: Annotated[str | None, Header()] = None,
+) -> User:
+    """The user behind a valid access token, or 401.
+
+    `WWW-Authenticate` is set so a client can tell "you are not logged in"
+    from "you are logged in and not allowed", which is the difference between
+    showing a login form and showing an error.
+    """
+    try:
+        token = security.bearer_token(authorization)
+        user_id = security.decode_token(token, expect=security.ACCESS)
+    except security.TokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = users_repo.get(db, user_id)
+    if user is None:                      # deleted while a valid token was live
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token is not valid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+CurrentUser = Annotated[User, Depends(require_user)]
+
+
+def owned_user_id(user_id: int, current_user: CurrentUser) -> int:
+    """A path `{user_id}` the caller is actually allowed to read or write.
+
+    403, not 404: the caller is authenticated and this is a real resource they
+    may not touch. Pretending it does not exist would be a lie the client
+    cannot act on.
+    """
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you can only access your own data",
+        )
+    return user_id
+
+
+OwnedUserId = Annotated[int, Depends(owned_user_id)]
+
+
+# --- rate limiting -------------------------------------------------------
+#
+# Redis is optional infrastructure. If it is down, the limiter logs and lets the
+# request through: a cache outage taking the whole API with it would be a worse
+# failure than the one the limiter prevents.
+
+def _allow(bucket: str, identity: str, per_minute: int) -> bool:
+    if per_minute <= 0:
+        return True
+    try:
+        import redis
+
+        client = redis.Redis.from_url(settings.redis_url, socket_timeout=0.25)
+        key = security.rate_limit_key(identity, bucket)
+        used = client.incr(key)
+        if used == 1:
+            client.expire(key, 60)
+        return used <= per_minute
+    except Exception as exc:                       # unreachable, missing, misconfigured
+        log.warning("rate limiter unavailable, allowing the request: %s", exc)
+        return True
+
+
+def auth_rate_limit(request: Request) -> None:
+    """Per-IP, on signup and login — the endpoints worth guessing against."""
+    client = request.client.host if request.client else "unknown"
+    if not _allow("auth", client, settings.auth_rate_limit_per_minute):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="too many attempts — wait a minute and try again",
+        )
+
+
+def ask_rate_limit(current_user: CurrentUser) -> None:
+    """Per-user, on /ai/ask — the one route that costs a model call."""
+    if not _allow("ask", str(current_user.id), settings.ask_rate_limit_per_minute):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="you are asking faster than I can think — give it a moment",
+        )
+
+
+def assert_owns(current_user: User, user_id: int) -> int:
+    """The body-payload counterpart to `owned_user_id`.
+
+    Some routes carry the user id in the request body rather than the path
+    (`POST /goals`, `POST /simulations`, `POST /ai/ask`). A path dependency
+    cannot reach those, so the handler calls this instead — same 403, same
+    reasoning.
+    """
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="you can only access your own data",
+        )
+    return user_id

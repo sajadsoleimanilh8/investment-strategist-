@@ -68,6 +68,69 @@ cheaper reason. They were fixed by changing what the model is *shown*:
 Fine-tuning is a standing obligation: every base-model bump is a retrain. It is
 not worth taking on for defects that a better prompt payload already removed.
 
+## The fine-tune — built, evaluated, not shipped (2026-09-10)
+
+The gate above said a fine-tune was not needed. It was built anyway, on
+request, and the result is worth keeping on record: **stock still wins.**
+
+| model | runs | mean | verdict | sides | grounded | no_advice | downgrades | sec |
+|---|---|---|---|---|---|---|---|---|
+| **llama3.2:3b (stock)** | 22, 22, 19 | **21.0/22 (95%)** | 39/39 | 15/15 | 66/66 | 66/66 | 0.3/run | 2.6 |
+| finmentor-3b (run 2) | 17, 18, 18 | 17.7/22 (80%) | 38/39 | 15/15 | 66/66 | 66/66 | 3.7/run | 2.6 |
+
+`LOCAL_LLM_MODEL` stays `llama3.2:3b`.
+
+**Dataset:** 584 pairs from 40 synthetic people across 8 buckets, 522 train /
+62 val, stratified by task and bucket. 99.8% of composed answers passed the
+seven-check grader and `safety.enforce`; the rest were dropped. Answers average
+47 words against ~1180-character prompts.
+
+**Training:** QLoRA r=16 on `unsloth/Llama-3.2-3B-Instruct`, 3 epochs, lr 2e-4
+cosine, bf16, on an RTX 5070 Ti (12 GB). **15.7 min, peak 4.8 GB VRAM**, eval
+loss 0.0497, token accuracy 97.3%. Backend was peft+trl+bitsandbytes rather
+than Unsloth — installing Unsloth would have downgraded `transformers`, `trl`
+and `datasets` in a shared interpreter, and plain QLoRA fits a 3B on 12 GB with
+room to spare. Same method; Unsloth is a speed optimisation.
+
+### Run 1 was garbage, and why
+
+The first run trained with `packing=True` and no prompt masking. These prompts
+are ~1180 characters of JSON against a 47-word answer, so the loss was
+dominated by the context — and the model learned to **emit JSON contexts**
+instead of replying to them:
+
+```
+Here is where they stand:
+{"onboarded": false, "health_score": 0.0, "components": [{"name": ...
+```
+
+19 of 22 answers were discarded by the safety layer. The fix is
+`packing=False` + `completion_only_loss=True`, with the dataset emitted as
+`prompt`/`completion` columns so TRL masks the prompt. Eval loss went 0.218 →
+0.0497 and clean answers 7/22 → 17.7/22. `tests/unit/test_ft_dataset.py` now
+pins the column split so this cannot silently regress.
+
+### Why run 2 still lost
+
+Tone and grounding are genuinely good — it copies verdict words (38/39), keeps
+before/after sides (15/15), invents no numbers, gives no advice:
+
+> "Sure — here's what you should focus on first. Your savings rate is Weak at
+> -0.15. Your emergency fund is Weak at 0.07 months of essential expenses.
+> Your goal progress is not available yet…"
+
+What it lost is **task separation**. With 522 highly templated rows and eval
+loss at 0.05, it memorised the shapes and then applied the *chat* shape to the
+*explain* path — answering "why is my financial health score what it is?" with
+a verdict list that never says the word "score", failing that probe 3/3. It
+also drifted to "you're not onboarded" on 2 chat probes over snapshots saying
+otherwise. Both are over-fitting to a composer that is too regular.
+
+If this is picked up again, the two things to change are: more lexical and
+structural variety per task (the composer has 3-4 frames per slot; it needs
+more), and fewer epochs or a lower rank to stop it memorising. A teacher model
+larger than 3B would help most, and cannot be pulled on this machine.
+
 ## What is left, and what a fine-tune would buy
 
 Across six runs the residue is small and two-shaped:

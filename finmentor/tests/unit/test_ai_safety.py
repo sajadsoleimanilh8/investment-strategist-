@@ -310,3 +310,27 @@ def test_the_rendered_context_never_trips_the_grounding_check():
 
 def test_a_magnitude_that_is_in_no_context_field_is_still_caught():
     assert ungrounded_numbers("You have $99,000,000.", {"savings_after": -36_000_000.0})
+
+
+def test_a_context_percentage_is_grounded_when_written_with_a_sign():
+    """`numbers_in_text` reads "5%" as both 5 and 0.05. A context that already
+    stores a percentage has to ground the fraction, or quoting its own figure
+    back reads as invented."""
+    assert ungrounded_numbers("Your goal is at 5%.", {"progress_pct": 5.0}) == []
+    assert ungrounded_numbers("You save 35% of income.", {"savings_rate": 0.35}) == []
+
+
+def test_a_percentage_in_no_context_field_is_still_caught():
+    assert ungrounded_numbers("Your goal is at 88%.", {"progress_pct": 5.0})
+
+
+def test_rounding_may_not_manufacture_a_zero():
+    """`round(0.0182, 0)` is 0.0. Without a guard, "worth 0 points" is grounded
+    by any small number in the context — the hole the ordinal exemption was
+    removed to close, reopened through the rounding rule."""
+    assert ungrounded_numbers("It is worth 0 points.", {"emergency_months": 1.82})
+    assert ungrounded_numbers("You have 0 saved.", {"savings_rate": 0.35})
+
+
+def test_a_real_zero_in_the_context_still_grounds_a_zero():
+    assert ungrounded_numbers("Your debt is $0.", {"debt": 0.0}) == []

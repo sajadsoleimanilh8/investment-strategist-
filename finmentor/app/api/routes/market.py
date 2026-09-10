@@ -11,9 +11,9 @@ what section 24 says must never sit on the request path.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.api.deps import DbSession, load_user
+from app.api.deps import DbSession, load_user, require_user
 from app.market import cache
 from app.models.market import MarketAsset
 from app.repositories import market as market_repo
@@ -22,7 +22,10 @@ from app.schemas.market import (
 )
 from app.services import market_engine
 
-router = APIRouter(prefix="/api", tags=["market"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["market"],
+                   dependencies=[Depends(require_user)])
 
 DEFAULT_DAYS = 30
 

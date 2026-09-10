@@ -117,3 +117,22 @@ def test_the_provider_switch_still_reaches_the_offline_double():
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
+
+
+def test_a_model_ollama_does_not_have_degrades_instead_of_crashing(monkeypatch):
+    """`LOCAL_LLM_MODEL=finmentor-3b` on a machine that never built it must
+    serve the verified figures, not a 500. Pointed at a closed port so the
+    failure is a refused connection, which is what an absent Ollama looks
+    like."""
+    from app.ai import synthesizer
+    from app.core.config import settings as live
+
+    monkeypatch.setattr(live, "local_llm_provider", "ollama")
+    monkeypatch.setattr(live, "local_llm_model", "finmentor-3b")
+    monkeypatch.setattr(live, "ollama_host", "http://127.0.0.1:1")
+
+    result = synthesizer.explain("why?", {"financial_health_score": 62.3})
+
+    assert result["source"] == "deterministic"
+    assert "62.3" in result["text"]
+    assert result["safety_report"]

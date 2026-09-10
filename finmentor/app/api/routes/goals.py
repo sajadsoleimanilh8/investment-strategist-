@@ -6,15 +6,18 @@ maths of its own.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DbSession, load_twin, load_user
+from app.api.deps import DbSession, load_twin, load_user, require_user
 from app.models.goal import FinancialGoal
 from app.repositories import goals as goals_repo
 from app.schemas.finance import GoalCreate, GoalIn, GoalOut
 from app.services import goal_engine
 
-router = APIRouter(prefix="/api", tags=["goals"])
+#: Guarded at the router, not per route: a route added here later is
+#: protected by default instead of by remembering.
+router = APIRouter(prefix="/api", tags=["goals"],
+                   dependencies=[Depends(require_user)])
 
 
 def _to_out(db, goal: FinancialGoal) -> GoalOut:
