@@ -16,9 +16,11 @@ Two things the phase-1 `market_snapshots` table decides for us:
 This module is the one place in `app/market` that touches the database — the
 providers and the analytics stay persistence-free.
 
-TODO(phase-7): an optional Redis layer in front of this, keyed by
-(symbol, days) with the same TTL. DB-backed caching is the requirement; Redis
-would only shave the round trip.
+Backlog (2026-09-10, not scheduled): an optional Redis layer in front of this,
+keyed by (symbol, days) with the same TTL. Redis is now a dependency — the auth
+rate limiter uses it — so the plumbing exists. DB-backed caching is the actual
+requirement and it is met; Redis here would only shave a round trip off an
+already-warm path, so it stays unbuilt until something measures it as slow.
 """
 from __future__ import annotations
 

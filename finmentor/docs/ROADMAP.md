@@ -166,41 +166,69 @@ Stub markers in code: `# >>> finmentor-stub <<<` + `TODO(phase-N)`.
 - **`LOCAL_LLM_MODEL` stays a plain env var.** No model tag is hard-coded
   outside `config.py`, and a test asserts it.
 
-## Phase 7 — Website
+## Phase 7 — Website  `[x]`
 
-FinMentor is not Telegram-only. The web app is a second delivery surface over
-the **same** FastAPI backend — `app/services`, `app/ai`, `app/market`,
-`app/api` are reused unchanged. Telegram keeps working throughout.
+A second delivery surface over the **same** FastAPI backend. `app/services`,
+`app/ai`, `app/market` and `app/api` are reused unchanged, and the Telegram bot
+kept working throughout — it never called the API over HTTP, it imports
+`app/api/ask.py` and `app/api/deps.py` directly, so guarding the routes could
+not break it.
 
-- [ ] **Auth** — build out `app/core/security.py`: signup / login, password
-      hashing (argon2/bcrypt), JWT access + refresh (or session cookies), an
-      `require_user` FastAPI dependency. Add `email` + `password_hash` to
-      `users` (Alembic migration). Telegram users stay keyed by `telegram_id`;
-      a row can have both.
-- [ ] Guard every `/api/*` route (except signup/login/healthz) with
-      `require_user`; a user only reads/writes their own data.
-- [ ] CORS config; rate limiting (Redis) on `/api/ai/ask` and `/api/simulations`.
-- [ ] Fill API gaps the web needs: expose the Time Machine, education
-      content listing + quiz submission, full profile/expense editing,
-      watchlist mutation (some exist bot-only today).
-- [ ] Frontend — stack decision (Next.js / SvelteKit / Vite+React), then the
-      dashboard per SPEC §30 (dark, green/red/neutral, "trust · clarity ·
-      youth"): onboarding, Financial Health + DNA, goals, What-if + Decision
-      simulators, Time Machine, Market watch, Ask AI, Learn.
-- [ ] Frontend talks only to the documented API — no business logic in the
-      client, same rule as the bot.
+- [x] **Auth** — `app/core/security.py` is real: argon2id password hashing,
+      HS256 JWTs with a checked `typ` (30-minute access, 14-day rotating
+      refresh), and a bearer-header parser. Migration `0129e065904c` adds
+      `email` + `password_hash`, makes `telegram_id` nullable, and adds a CHECK
+      that every row carries at least one identity.
+- [x] `POST /api/auth/{signup,login,refresh,logout}`, `GET /api/auth/me`,
+      and a `require_user` dependency.
+- [x] Every `/api/*` route except signup/login/refresh/logout and `/healthz` is
+      guarded **at the router**, so a route added later is protected by default
+      rather than by remembering. `{user_id}` paths resolve through
+      `OwnedUserId` (403 on someone else's data); the three routes carrying a
+      user id in the *body* call `assert_owns`. Both are tested case-by-case
+      across all 22 routes.
+- [x] CORS from `settings.cors_origins`; Redis rate limiting on signup/login
+      (per IP) and `/api/ai/ask` (per user), which logs and allows the request
+      if Redis is unreachable — a cache outage must not take the API with it.
+- [x] API gaps the web needed: `GET /api/learn`, `GET /api/learn/{key}`,
+      `POST /api/learn/{key}/quiz` (writes `education_progress`, which raises
+      the Financial DNA knowledge band), and `GET /api/me/summary` — one call
+      the dashboard hydrates from, composed from existing builders.
+- [x] **Frontend** — Vite + React + TypeScript in `web/`. React Router,
+      TanStack Query, a typed API client with refresh-on-401, an auth context,
+      a route guard, and eleven pages. No UI library, no CSS framework.
+- [x] **Unstyled by design.** `web/src/styles/layout.css` is structure only and
+      carries the design tokens declared and left empty behind a
+      `/* THEME: user fills this */` block. SPEC section 30's direction (dark,
+      green/red/neutral, "trust · clarity · youth") has not been implemented —
+      that decision is still open, and guessing at it now would mean throwing
+      it away.
 - **Done when:** a new user can sign up on the web and complete the full
-  SPEC §36 flow in the browser, in DEMO_MODE, with external APIs and Ollama
-  down — and the Telegram bot still passes its own §36 flow unchanged.
+  SPEC section 36 flow in the browser, in DEMO_MODE, with external APIs and
+  Ollama down — and the Telegram bot still passes its own flow unchanged.
+  *Verified 2026-09-10 over real HTTP against Postgres with `OLLAMA_HOST`
+  pointed at a dead port: signup -> onboarding -> dashboard (62.3/100, five
+  components, DNA, one goal at 33.3%) -> what-if (10m -> 15m per month, goal
+  date 2027-01-10 -> 2026-12-10) -> purchase (savings 45m -> 0, cover 1.82 ->
+  0.91 months) -> time machine -> watchlist (NVDA +15.51%, BTC +4.37%) ->
+  learn + quiz -> `/ask`, which returned `source=deterministic` with the
+  verified figures. Unauthenticated 401, cross-user 403.*
 
 ## Phase 8 — Polish & Deploy
+- [ ] Visual design for `web/` — fill the token block in
+      `web/src/styles/layout.css`; the structure is built and waiting for it
 - [ ] Error handling + user-friendly messages everywhere (bot + web + API)
 - [ ] `DEMO_MODE` end-to-end pass with all external services off (CI check)
 - [ ] Full test suite green in CI; coverage on `app/services/*`
 - [ ] Deployment: Dockerfile(s), compose for api + web + db + redis,
       `alembic upgrade` on boot
-- [ ] Pre-deploy manual checklist: real Alpha Vantage / CoinGecko keys, real
-      OpenAI/Anthropic call if remote LLM is enabled
+- [ ] Pre-deploy manual checklist, all needing keys or network this machine
+      does not have: a real Alpha Vantage call, a real CoinGecko call, and a
+      real OpenAI/Anthropic call if the remote LLM is enabled. All three are
+      written and their fallbacks are tested; what is unverified is whether the
+      live responses still match the shape the parsers expect.
+- [ ] `JWT_SECRET` set to a real value — `get_settings()` refuses to start
+      outside DEMO_MODE while it is still the development default
 - [ ] Docs: finalise README, add screenshots / demo script
 - [ ] Optional: local-model fine-tune notes (financial tone / accuracy)
 

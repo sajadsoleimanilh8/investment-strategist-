@@ -41,7 +41,15 @@ one inline-keyboard router. It is a thin delivery layer: message bodies are
 built by pure functions in `app/bot/views.py` from engine output, and `/ask`
 calls the same `app/api/ask.py` pipeline the HTTP route does.
 
-Remaining: polish, rate limiting and deployment (phase 7).
+**Phase 7:** the web app — a second delivery surface over the same API. Real
+authentication (argon2 + JWT access/refresh), every route guarded and every
+`{user_id}` checked against the token, CORS, Redis rate limiting, and a
+Vite + React client covering the whole flow. The client is **deliberately
+unstyled**: structure, routing and state are finished, and the design tokens in
+`web/src/styles/layout.css` are declared and left empty for the visual design
+that has not been chosen yet.
+
+Remaining: that visual design, plus polish and deployment (phase 8).
 
 - Full spec: [`docs/SPEC.md`](docs/SPEC.md)
 - Phase plan: [`docs/ROADMAP.md`](docs/ROADMAP.md)
@@ -91,6 +99,8 @@ app/
   api/        FastAPI routes + ask.py (the shared question pipeline) + deps.py
   bot/        Telegram: handlers, callback router, onboarding conversation,
               inline keyboards, pure view builders, copy, formatting
+web/          the browser client (Vite + React + TypeScript) — see web/README.md
+scripts/ft/   local-model evaluation harness + the QLoRA fine-tune pipeline
 tests/        unit/ (engine, models, repos, config)  +  api/
 scripts/      seed_demo_user, fetch_market_snapshots
 migrations/   Alembic environment + versions
@@ -114,7 +124,16 @@ GET  /api/market/assets               GET  /api/market/assets/{symbol}
 GET  /api/market/watchlist/{user_id}  POST /api/market/watchlist/{user_id}
                                       DELETE /api/market/watchlist/{user_id}/{symbol}
 POST /api/ai/ask                      GET  /api/ai/transcript/{user_id}
+POST /api/auth/signup                 POST /api/auth/login
+POST /api/auth/refresh                POST /api/auth/logout   GET /api/auth/me
+GET  /api/learn                       GET  /api/learn/{key}
+POST /api/learn/{key}/quiz            GET  /api/me/summary
 ```
+
+Everything except `/api/auth/{signup,login,refresh,logout}` and `/healthz`
+requires a bearer token, and a route taking a `{user_id}` answers 403 for
+anyone else's. The Telegram bot does not go through HTTP at all — it imports
+the pipeline directly, which is why adding auth did not touch it.
 
 `POST /api/simulations` takes `{user_id, kind, params}` where `kind` is
 `what_if`, `time_machine`, or `decision`; the run and its result are persisted

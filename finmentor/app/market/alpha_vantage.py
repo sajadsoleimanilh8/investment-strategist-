@@ -2,7 +2,11 @@
 
 Ported from legacy data/market_data.fetch_stock_daily. On any failure the
 caller (app.services.market_engine) falls back to MockMarketProvider.
-# >>> finmentor-stub <<<
+
+**Not verified against the live API.** That needs a real key and network, so it
+is a pre-deploy manual step (see docs/ROADMAP.md, Phase 8). The provider loop,
+the parsing, and the fallback to mock are covered by tests; what is untested is
+whether Alpha Vantage still answers in the shape this expects.
 """
 from __future__ import annotations
 

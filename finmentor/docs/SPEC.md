@@ -162,15 +162,25 @@ customise the split.
 Two delivery surfaces over one FastAPI backend; all business logic stays
 server-side.
 
-**Telegram bot** (ships first — ROADMAP Phase 6). Commands: `/start /profile
-/health /budget /goals /simulate /market /watchlist /learn /ask /help`. Inline
-keyboards everywhere; minimise typing. Identity = Telegram user id, no login.
+**Telegram bot** — built (Phase 6). Commands: `/start /profile /health /budget
+/goals /simulate /market /watchlist /learn /ask /help`. Inline keyboards
+everywhere; minimise typing. Identity = Telegram user id, no login. It does not
+call the API over HTTP: it imports the pipeline in-process, so it is unaffected
+by the web's auth.
 
-**Web app** (ROADMAP Phase 7). Same features as a dark financial dashboard
-(§30). Requires real auth — signup / login, hashed passwords, JWT or session
-cookies (`app/core/security.py`); `users` gains `email` + `password_hash`. A
-user only ever sees their own data. The frontend calls the documented API and
-holds no logic of its own.
+**Web app** — built (Phase 7), in `web/`. Vite + React + TypeScript, eleven
+pages covering the same features. Real auth: argon2id passwords, a 30-minute
+JWT access token and a rotating 14-day refresh token (`app/core/security.py`);
+`users` carries `email` + `password_hash`, and `telegram_id` is nullable so one
+row can hold either identity or both. Every route is guarded and a `{user_id}`
+belonging to someone else answers 403. The frontend calls the documented API
+and holds no logic of its own.
+
+*The visual design (§30) is **not** implemented.* The client ships with
+browser-default styling and a layout-only stylesheet whose design tokens are
+declared and left empty behind a `/* THEME: user fills this */` block. Routing,
+auth, forms, state and error handling are finished; the look is the one
+remaining decision, and it is deliberately still open.
 
 Plain English, simple terminology, on both.
 

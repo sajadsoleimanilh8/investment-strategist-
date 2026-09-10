@@ -147,13 +147,19 @@ def _what_if_params(lowered: str) -> tuple[WhatIfParams | None, list[str]]:
 
 
 def llm_fallback(text: str) -> ParsedIntent:
-    """Phase-5 hook: an LLM parser constrained to the same schema.
+    """Report "I could not read that" rather than guess at a scenario.
 
-    Until then this reports "I could not read that" rather than guessing — an
-    unparsed result is a safe outcome, an invented scenario is not.
+    This was a seam for an LLM parser constrained to the same schema. It is
+    **deliberately still empty**, and the reason is worth recording: the
+    conversational layer removed the need for it. An unparsed message no longer
+    falls off a cliff — it goes to `synthesizer.chat`, which answers warmly
+    from the user's own snapshot and points at the right feature. Guessing at a
+    `WhatIfParams` from an ambiguous sentence would produce a confident wrong
+    projection, which is the one outcome this codebase is built to avoid.
+
+    Kept as a named function because `parse` reads better for having it, and
+    because a future structured-output parser would land exactly here.
     """
-    # TODO(phase-5): call the local model with a schema-constrained prompt and
-    #   validate its output into WhatIfParams before returning it.
     return ParsedIntent(intent="smalltalk", raw=text, confidence=NO_MATCH, unparsed=True)
 
 

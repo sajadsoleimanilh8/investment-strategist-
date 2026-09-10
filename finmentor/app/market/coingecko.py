@@ -1,7 +1,10 @@
 """Crypto provider (CoinGecko market_chart, no key needed).
 
 Ported from legacy data/market_data.fetch_crypto_daily.
-# >>> finmentor-stub <<<
+
+**Not verified against the live API.** Same as the equities provider: needs
+network, so it is a pre-deploy manual step (docs/ROADMAP.md, Phase 8). The
+fallback to mock is tested; the live response shape is not.
 """
 from __future__ import annotations
 
