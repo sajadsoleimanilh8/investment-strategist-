@@ -77,11 +77,22 @@ def test_the_whole_flow_runs_inside_the_one_second_budget(demo_twin):
 
 
 def test_the_flow_never_touches_an_llm():
+    """Unimport the model clients, run the flow, and check they stayed gone.
+
+    `sys.modules` is put back exactly as it was. Leaving a module unimported
+    would let a later import build a *second* copy of the same class, so a test
+    patching `FakeLocalProvider` would patch a class the synthesizer never
+    instantiates — a failure that looks like a bug in unrelated code.
+    """
     import sys
 
-    for name in [n for n in sys.modules if n.startswith(("app.ai.local", "app.ai.remote"))]:
+    prefixes = ("app.ai.local", "app.ai.remote")
+    removed = {n: sys.modules[n] for n in list(sys.modules) if n.startswith(prefixes)}
+    for name in removed:
         del sys.modules[name]
 
-    parse(QUESTION)
-
-    assert [n for n in sys.modules if n.startswith(("app.ai.local", "app.ai.remote"))] == []
+    try:
+        parse(QUESTION)
+        assert [n for n in sys.modules if n.startswith(prefixes)] == []
+    finally:
+        sys.modules.update(removed)

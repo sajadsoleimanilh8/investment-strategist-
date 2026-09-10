@@ -69,7 +69,11 @@ def test_running_a_simulation_loads_no_ai_module():
     """The proof that matters: exercise the engine and check `sys.modules`."""
     import sys
 
-    for name in [n for n in sys.modules if n.startswith("app.ai")]:
+    # Restored in the `finally` below: an unimported module lets a later import
+    # build a second copy of the same class, and a test that patches one copy
+    # then has no effect on the other.
+    removed = {n: sys.modules[n] for n in list(sys.modules) if n.startswith("app.ai")}
+    for name in removed:
         del sys.modules[name]
 
     from app.schemas.finance import ExpenseBreakdown, FinancialProfileIn, GoalIn
@@ -85,11 +89,14 @@ def test_running_a_simulation_loads_no_ai_module():
                            current_savings=45_000_000, emergency_fund=30_000_000),
         [GoalIn(name="Laptop", target_amount=60_000_000, current_amount=20_000_000)],
     )
-    run_what_if(twin, WhatIfParams(monthly_savings_delta=5_000_000))
-    compare_paths(twin)
-    evaluate_purchase(twin, 40_000_000)
+    try:
+        run_what_if(twin, WhatIfParams(monthly_savings_delta=5_000_000))
+        compare_paths(twin)
+        evaluate_purchase(twin, 40_000_000)
 
-    assert [n for n in sys.modules if n.startswith("app.ai")] == []
+        assert [n for n in sys.modules if n.startswith("app.ai")] == []
+    finally:
+        sys.modules.update(removed)
 
 
 # --- phase 5: the explanation layer stays on its own side ----------------
