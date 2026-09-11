@@ -31,7 +31,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.ai import safety  # noqa: E402
-from app.ai.prompts import CHAT_TEMPLATE, EXPLAIN_TEMPLATE, SYSTEM_PROMPT  # noqa: E402
+from app.ai.prompts import (  # noqa: E402
+    CHAT_TEMPLATE, EXPLAIN_TEMPLATE, SYSTEM_PROMPT, TASK_CHAT, TASK_EXPLAIN,
+)
 from app.ai.rendering import render_sides  # noqa: E402
 from app.ai.synthesizer import render_history  # noqa: E402
 from app.schemas.simulation import WhatIfParams  # noqa: E402
@@ -54,6 +56,7 @@ NAMED_ASSETS = ("bitcoin", "btc", "ethereum", "eth", "nvidia", "nvda", "apple",
 def explain_payload(question: str, context: dict) -> str:
     sides = render_sides(context)
     return EXPLAIN_TEMPLATE.format(
+        task=TASK_EXPLAIN,
         question=question,
         sides=f"\n{sides}\n" if sides else "",
         context_json=json.dumps(context, ensure_ascii=False, default=str),
@@ -62,6 +65,7 @@ def explain_payload(question: str, context: dict) -> str:
 
 def chat_payload(message: str, snapshot: dict, history: list[dict]) -> str:
     return CHAT_TEMPLATE.format(
+        task=TASK_CHAT,
         snapshot_json=json.dumps(snapshot, ensure_ascii=False, default=str),
         history=render_history(history),
         question=message,

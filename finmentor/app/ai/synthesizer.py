@@ -27,6 +27,7 @@ from app.core.config import settings
 from app.ai.local_llm import LocalLLMUnavailable, get_local_provider
 from app.ai.prompts import (
     CHAT_SYNTHESIS_TEMPLATE, CHAT_TEMPLATE, EXPLAIN_TEMPLATE, SYNTHESIS_TEMPLATE,
+    TASK_CHAT, TASK_EXPLAIN,
 )
 from app.ai.rendering import render_context, render_sides
 
@@ -63,6 +64,7 @@ def explain(question: str, context: dict, *, market_context: bool = False) -> di
     context_json = json.dumps(context, ensure_ascii=False, default=str)
     sides = render_sides(context)
     explain_prompt = EXPLAIN_TEMPLATE.format(
+        task=TASK_EXPLAIN,
         question=question,
         # blank for a one-sided context, so the template does not grow a hole
         sides=f"\n{sides}\n" if sides else "",
@@ -138,6 +140,7 @@ def chat(message: str, snapshot: dict, history: list[dict]) -> dict:
     """
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, default=str)
     prompt = CHAT_TEMPLATE.format(
+        task=TASK_CHAT,
         snapshot_json=snapshot_json,
         history=render_history(history),
         question=message,

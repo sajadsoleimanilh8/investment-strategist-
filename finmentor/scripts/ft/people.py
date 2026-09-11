@@ -82,12 +82,13 @@ GOAL_NAMES = ("Laptop", "Emergency fund", "House deposit", "Car", "Trip",
               "Course fees", "Phone", "Camera", "Bike", "Wedding")
 
 
-def _make(rng: random.Random, index: int, bucket: str) -> Person:
+def _make(rng: random.Random, index: int, bucket: str, tag: str = "") -> Person:
     """One person, shaped to land in `bucket` once the engine scores them."""
     income = round(rng.uniform(12_000_000, 60_000_000), -5)
 
+    key = f"p{tag}{index:02d}_{bucket}"
     if bucket == "not_onboarded":
-        return Person(f"p{index:02d}_{bucket}", bucket, None, [])
+        return Person(key, bucket, None, [])
 
     if bucket == "broke":
         spend, savings, debt, payment, fund = 0.97, 500_000, 0, 0, 200_000
@@ -134,14 +135,21 @@ def _make(rng: random.Random, index: int, bucket: str) -> Person:
                 rng.choice([0.0, 0.05, 0.2, 0.33, 0.5, 0.68, 0.9]),
             ))
 
-    return Person(f"p{index:02d}_{bucket}", bucket, profile, goals,
+    return Person(key, bucket, profile, goals,
                   completed_topics=rng.choice([0, 0, 1, 3, 5, 9]))
 
 
-def build_population(count: int = 40, seed: int = SEED) -> list[Person]:
-    """`count` people, cycling the buckets so every shape is represented."""
+def build_population(count: int = 40, seed: int = SEED, tag: str = "") -> list[Person]:
+    """`count` people, cycling the buckets so every shape is represented.
+
+    `tag` goes into the key. Without it two populations drawn from different
+    seeds produce the same key sequence — `p00_broke`, `p01_debt_heavy`, … —
+    and a held-out slice cannot prove it is held out, because its overlap check
+    compares labels that collide by construction rather than the people behind
+    them.
+    """
     rng = random.Random(seed)
-    return [_make(rng, i, BUCKETS[i % len(BUCKETS)]) for i in range(count)]
+    return [_make(rng, i, BUCKETS[i % len(BUCKETS)], tag) for i in range(count)]
 
 
 # --- the real contexts ---------------------------------------------------

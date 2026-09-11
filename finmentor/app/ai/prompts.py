@@ -31,7 +31,22 @@ How to talk:
 - You are a guide, not an advisor: you explain what the numbers mean and let
   the person decide."""
 
-EXPLAIN_TEMPLATE = """Question: {question}
+#: Every prompt opens with its task name. The two tasks look similar to a 3B —
+#: both are "here are some figures, say something about them" — and a fine-tune
+#: on 500 examples of each learned to apply the chat shape to explain prompts,
+#: answering "why is my health score what it is?" with a verdict list that
+#: never said the word "score". A marker the model sees at training *and*
+#: inference is the cheapest thing that keeps them apart.
+TASK_EXPLAIN = "EXPLAIN"
+TASK_CHAT = "CHAT"
+
+EXPLAIN_TEMPLATE = """TASK: {task}
+
+You are answering ONE question, in prose, about the material below. Do not
+produce a list of every verdict and do not restate the fields as a table —
+that is the CHAT task, not this one.
+
+Question: {question}
 {sides}
 Context (the only numbers you may use):
 {context_json}
@@ -58,7 +73,13 @@ buy or sell advice. 3-5 short sentences."""
 #: every probe, and it never needed to obey it: the bot attaches a keyboard to
 #: the reply, so the next step is a button rather than a sentence the model has
 #: to remember to write.
-CHAT_TEMPLATE = """Here is where this person stands:
+CHAT_TEMPLATE = """TASK: {task}
+
+You are replying to a person in conversation, not answering an exam question.
+Warm, short, and about them. Do not produce a table or a breakdown — that is
+the EXPLAIN task, not this one.
+
+Here is where this person stands:
 {snapshot_json}
 
 Recent conversation:
