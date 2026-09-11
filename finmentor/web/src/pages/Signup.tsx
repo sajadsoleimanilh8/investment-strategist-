@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { Field } from "../components/Field";
+import { messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
 
@@ -29,7 +30,7 @@ export function Signup() {
       await signup(email, password);
       navigate("/onboarding", { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not sign up.");
+      setError(messageFor(caught));
     } finally {
       setBusy(false);
     }

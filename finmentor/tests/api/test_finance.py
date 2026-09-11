@@ -3,6 +3,7 @@ import pytest
 
 from app.repositories import profiles as profiles_repo
 from app.repositories import users as users_repo
+from tests.conftest import error_message
 
 PERIOD = "2026-09"
 
@@ -87,7 +88,7 @@ def test_expenses_are_scoped_to_their_period(client, user_id):
 def test_get_without_a_profile_is_404(client, user_id):
     response = client.get(f"/api/financial-profile/{user_id}")
     assert response.status_code == 404
-    assert "profile" in response.json()["detail"]
+    assert "profile" in error_message(response)
 
 
 def test_unknown_user_is_404_on_both_verbs(client):

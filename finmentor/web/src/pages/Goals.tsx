@@ -2,7 +2,7 @@ import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { createGoal, listGoals } from "../api/goals";
-import { AsyncBoundary } from "../components/AsyncBoundary";
+import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
 import { Field } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { compact } from "../components/Money";
@@ -43,8 +43,7 @@ export function Goals() {
       queryClient.invalidateQueries({ queryKey: ["goals"] });
       queryClient.invalidateQueries({ queryKey: ["summary"] });
     },
-    onError: (caught) =>
-      setError(caught instanceof Error ? caught.message : "Could not add that."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   function submit(event: FormEvent) {

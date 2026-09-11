@@ -11,6 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api import errors
 from app.api.routes import ALL_ROUTERS
 from app.core.config import settings
 from app.core.logging import configure_logging, safe_json
@@ -58,6 +59,10 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    # Before the routers: a handler registered later still catches everything,
+    # but keeping it here makes the order of the pipeline readable.
+    errors.install(app)
 
     for router in ALL_ROUTERS:
         app.include_router(router)

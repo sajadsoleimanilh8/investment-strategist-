@@ -158,3 +158,16 @@ def raw_client(db) -> TestClient:
             yield test_client
     finally:
         fastapi_app.dependency_overrides.clear()
+
+
+def error_message(response) -> str:
+    """The human-readable half of the API's error envelope.
+
+    Phase 8 replaced FastAPI's bare `{"detail": ...}` with a stable shape
+    (`app/api/errors.py`), so assertions go through here rather than reaching
+    into the body — one place to change if the envelope ever moves again.
+    """
+    body = response.json()["error"]
+    fields = body.get("fields")
+    return body["message"] + ("; " + "; ".join(
+        f"{f['field']}: {f['message']}" for f in fields) if fields else "")

@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { Field } from "../components/Field";
+import { messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
 
@@ -24,7 +25,7 @@ export function Login() {
       await login(email, password);
       navigate(location.state?.from ?? "/", { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not sign in.");
+      setError(messageFor(caught));
     } finally {
       setBusy(false);
     }

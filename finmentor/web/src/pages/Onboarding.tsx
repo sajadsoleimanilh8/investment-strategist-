@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { saveProfile } from "../api/profile";
 import { createGoal } from "../api/goals";
 import { Field } from "../components/Field";
+import { messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
 import { EXPENSE_CATEGORIES, type ExpenseBreakdown } from "../api/types";
@@ -104,7 +105,7 @@ export function Onboarding() {
       await refreshUser();
       navigate("/", { replace: true });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save that.");
+      setError(messageFor(caught));
     } finally {
       setBusy(false);
     }

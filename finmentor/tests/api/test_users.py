@@ -1,5 +1,6 @@
 """POST /api/users and GET /api/users/{id} against the test database."""
 from app.repositories import users as users_repo
+from tests.conftest import error_message
 
 
 def test_create_user_persists_and_returns_it(client, db):
@@ -33,13 +34,13 @@ def test_duplicate_telegram_id_is_rejected(client):
     response = client.post("/api/users", json={"telegram_id": 555_004})
 
     assert response.status_code == 409
-    assert "telegram_id" in response.json()["detail"]
+    assert "telegram_id" in error_message(response)
 
 
 def test_unknown_user_is_404(client):
     response = client.get("/api/users/99999")
     assert response.status_code == 404
-    assert response.json()["detail"] == "user not found"
+    assert error_message(response) == "user not found"
 
 
 def test_invalid_payloads_are_422(client):

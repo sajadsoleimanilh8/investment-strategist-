@@ -12,7 +12,7 @@ import {
 } from "react";
 
 import * as authApi from "../api/auth";
-import { restoreSession, setTokens } from "../api/client";
+import { isSignedIn, onAuthChange, restoreSession, setTokens } from "../api/client";
 import type { Me } from "../api/types";
 
 interface AuthState {
@@ -50,6 +50,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [refreshUser]);
+
+  // When a session ends somewhere other than the logout button — a refresh
+  // token that expired while the tab sat open, and the silent retry gave up —
+  // the client clears its tokens and announces it. Without this subscription
+  // React still believes someone is signed in, so instead of being sent to the
+  // login page they sit on a dashboard where every request fails.
+  useEffect(() => onAuthChange(() => {
+    if (!isSignedIn()) setUser(null);
+  }), []);
 
   const signup = useCallback(async (email: string, password: string) => {
     await authApi.signup(email, password);

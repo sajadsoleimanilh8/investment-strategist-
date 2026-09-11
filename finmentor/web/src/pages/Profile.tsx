@@ -10,7 +10,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getProfile, saveProfile } from "../api/profile";
-import { AsyncBoundary } from "../components/AsyncBoundary";
+import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
 import { Field } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { EXPENSE_CATEGORIES, type ExpenseBreakdown } from "../api/types";
@@ -75,8 +75,7 @@ export function Profile() {
       queryClient.invalidateQueries({ queryKey: ["summary"] });
       queryClient.invalidateQueries({ queryKey: ["profile"] });
     },
-    onError: (caught) =>
-      setError(caught instanceof Error ? caught.message : "Could not save that."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   function submit(event: FormEvent) {

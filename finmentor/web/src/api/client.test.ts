@@ -9,7 +9,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, api, getAccessToken, request, restoreSession, setTokens } from "./client";
+import {
+  ApiError, OFFLINE_MESSAGE, api, getAccessToken, request, restoreSession, setTokens,
+} from "./client";
 
 const PAIR = {
   access_token: "access-1",
@@ -245,5 +247,92 @@ describe("restoreSession", () => {
     fetchMock.mockResolvedValueOnce(emptyResponse(401));
 
     await expect(restoreSession()).resolves.toBe(false);
+  });
+});
+
+describe("errors a person has to read", () => {
+  it("reads the API's error envelope", async () => {
+    setTokens(PAIR);
+    fetchMock.mockResolvedValue(jsonResponse(
+      { error: { code: "forbidden", message: "you can only access your own data",
+                 request_id: "ab12cd34" } }, 403));
+
+    await expect(api.get("/api/users/2"))
+      .rejects.toThrow("you can only access your own data");
+  });
+
+  it("keeps the request id so a 500 can be quoted to support", async () => {
+    setTokens(PAIR);
+    fetchMock.mockResolvedValue(jsonResponse(
+      { error: { code: "internal_error", message: "Something went wrong on our side.",
+                 request_id: "deadbeef" } }, 500));
+
+    const error = (await api.get("/api/me/summary").catch((e) => e)) as ApiError;
+
+    expect(error.requestId).toBe("deadbeef");
+    expect(error.userMessage).toContain("deadbeef");
+  });
+
+  it("prefers field-level messages, which a form can point at", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({
+      error: {
+        code: "invalid_request", message: "Some of that was not valid.",
+        request_id: "aa11bb22",
+        fields: [{ field: "email", message: "is not a valid email address" }],
+      },
+    }, 422));
+
+    await expect(api.post("/api/auth/signup", {}, true))
+      .rejects.toThrow("email: is not a valid email address");
+  });
+
+  it("still understands FastAPI's own shape from anything upstream of us", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ detail: "Not Found" }, 404));
+
+    await expect(api.get("/api/nope")).rejects.toThrow("Not Found");
+  });
+
+  it("falls back to the status text for a proxy's HTML error page", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>502 Bad Gateway</html>",
+                                             { status: 502, statusText: "Bad Gateway" }));
+
+    await expect(api.get("/api/me/summary")).rejects.toThrow("Bad Gateway");
+  });
+});
+
+describe("the network being down", () => {
+  it("becomes a readable message, not an unhandled TypeError", async () => {
+    // An unhandled rejection here is what renders as a blank screen.
+    setTokens(PAIR);
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const error = (await api.get("/api/me/summary").catch((e) => e)) as ApiError;
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.isOffline).toBe(true);
+    expect(error.userMessage).toBe(OFFLINE_MESSAGE);
+  });
+
+  it("does not mistake being offline for being signed out", async () => {
+    // Clearing tokens here would log someone out every time their wifi
+    // hiccups, and they would have to sign in again to find that out.
+    setTokens(PAIR);
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await api.get("/api/me/summary").catch(() => null);
+
+    expect(getAccessToken()).toBe("access-1");
+  });
+
+  it("handles the connection dropping during the retry after a refresh", async () => {
+    setTokens(PAIR);
+    fetchMock
+      .mockResolvedValueOnce(emptyResponse(401))
+      .mockResolvedValueOnce(jsonResponse(FRESH))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    const error = (await api.get("/api/auth/me").catch((e) => e)) as ApiError;
+
+    expect(error.isOffline).toBe(true);
   });
 });

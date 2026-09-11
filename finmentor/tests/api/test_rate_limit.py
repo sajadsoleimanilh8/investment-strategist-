@@ -17,6 +17,7 @@ import pytest
 
 from app.core import security
 from app.core.config import settings
+from tests.conftest import error_message
 
 LIMIT = 3
 #: What `request.client.host` is under TestClient. The limiter keys on it, so
@@ -84,7 +85,7 @@ def test_the_request_after_the_limit_is_429(raw_client, limiter):
     refused = signup(raw_client, LIMIT)
 
     assert refused.status_code == 429
-    assert "too many attempts" in refused.json()["detail"]
+    assert "too many attempts" in error_message(refused)
 
 
 def test_it_stays_refused_rather_than_letting_the_next_one_through(raw_client, limiter):
@@ -167,7 +168,7 @@ def test_the_ask_refusal_is_worded_for_a_person(raw_client, limiter, db, monkeyp
         response = raw_client.post("/api/ai/ask", json=payload, headers=headers)
 
     assert response.status_code == 429
-    assert "give it a moment" in response.json()["detail"]
+    assert "give it a moment" in error_message(response)
 
 
 # --- failure modes -------------------------------------------------------

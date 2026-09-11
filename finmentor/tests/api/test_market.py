@@ -8,6 +8,7 @@ import pytest
 from app.repositories import market as market_repo
 from app.schemas.market import MARKET_DISCLAIMER
 from scripts.seed_market_assets import seed_market_assets
+from tests.conftest import error_message
 
 
 @pytest.fixture
@@ -93,7 +94,7 @@ def test_a_lowercase_symbol_still_resolves(client, assets):
 def test_an_unknown_symbol_is_404(client, assets):
     response = client.get("/api/market/assets/DOGE")
     assert response.status_code == 404
-    assert "DOGE" in response.json()["detail"]
+    assert "DOGE" in error_message(response)
 
 
 # --- watchlist ----------------------------------------------------------
@@ -147,7 +148,7 @@ def test_removing_something_not_watched_is_still_204(client, user_id):
 def test_adding_an_unknown_symbol_is_422(client, user_id):
     response = client.post(f"/api/market/watchlist/{user_id}", json={"symbol": "DOGE"})
     assert response.status_code == 422
-    assert "DOGE" in response.json()["detail"]
+    assert "DOGE" in error_message(response)
 
 
 def test_watchlist_for_an_unknown_user_is_404(client, assets):

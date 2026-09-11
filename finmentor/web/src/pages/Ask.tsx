@@ -11,7 +11,7 @@ import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { ask as askApi, transcript as transcriptApi } from "../api/ask";
-import { AsyncBoundary } from "../components/AsyncBoundary";
+import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
 import type { AskResponse } from "../api/types";
@@ -48,8 +48,7 @@ export function Ask() {
       setAnswers((all) => [...all, { question: text, response }]);
       setQuestion("");
     },
-    onError: (caught) =>
-      setError(caught instanceof Error ? caught.message : "Could not answer that."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   function submit(event: FormEvent) {

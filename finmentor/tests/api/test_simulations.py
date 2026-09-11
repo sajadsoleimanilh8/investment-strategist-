@@ -1,5 +1,6 @@
 """POST /api/simulations and GET /api/simulations/{user_id}."""
 import pytest
+from tests.conftest import error_message
 
 PERIOD = "2026-09"
 PROFILE_BODY = {
@@ -78,7 +79,7 @@ def test_a_goal_belonging_to_someone_else_is_422(client, user_id, bare_user_id):
         "user_id": user_id, "kind": "what_if", "params": {"goal_id": other["id"]},
     })
     assert response.status_code == 422
-    assert "goal_id" in response.json()["detail"]
+    assert "goal_id" in error_message(response)
 
 
 # --- time_machine -------------------------------------------------------

@@ -10,6 +10,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { runDecision, runTimeMachine, runWhatIf } from "../api/simulations";
 import { Field } from "../components/Field";
+import { messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { money } from "../components/Money";
 import { useAuth } from "../auth/AuthContext";
@@ -60,17 +61,17 @@ export function Simulate() {
 
   const whatIf = useMutation<SimulationOut>({
     mutationFn: () => runWhatIf(user!.id, { monthly_savings_delta: Number(savingsDelta) }),
-    onError: (caught) => setError(caught instanceof Error ? caught.message : "Failed."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   const decision = useMutation<DecisionOut>({
     mutationFn: () => runDecision(user!.id, Number(price)),
-    onError: (caught) => setError(caught instanceof Error ? caught.message : "Failed."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   const timeMachine = useMutation<ScenarioComparison[]>({
     mutationFn: () => runTimeMachine(user!.id),
-    onError: (caught) => setError(caught instanceof Error ? caught.message : "Failed."),
+    onError: (caught) => setError(messageFor(caught)),
   });
 
   function submitWhatIf(event: FormEvent) {

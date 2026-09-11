@@ -12,6 +12,7 @@ import pytest
 from app.core import security
 from app.core.config import settings
 from app.schemas.auth import MIN_PASSWORD_LENGTH
+from tests.conftest import error_message
 
 EMAIL = "sam@example.com"
 PASSWORD = "a-long-enough-password"
@@ -111,7 +112,14 @@ def test_the_two_failures_are_indistinguishable(raw_client):
     wrong_password = login(raw_client, password="the-wrong-password")
     unknown_email = login(raw_client, email="nobody@example.com")
 
-    assert wrong_password.json() == unknown_email.json()
+    # Everything except the request id, which is deliberately unique per
+    # request and carries nothing about which account was tried.
+    def without_request_id(response):
+        body = response.json()["error"]
+        return {k: v for k, v in body.items() if k != "request_id"}
+
+    assert without_request_id(wrong_password) == without_request_id(unknown_email)
+    assert wrong_password.status_code == unknown_email.status_code
 
 
 def test_a_telegram_user_cannot_be_logged_into(raw_client, db):
@@ -345,4 +353,4 @@ def test_a_403_is_not_a_404(raw_client, two_users):
     response = raw_client.get(f"/api/users/{their_id}", headers=auth(my_token))
 
     assert response.status_code == 403
-    assert "your own" in response.json()["detail"]
+    assert "your own" in error_message(response)

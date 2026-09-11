@@ -22,11 +22,32 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly detail: string,
+    /** The id the API logged this under. Worth showing on a 500. */
+    readonly requestId?: string,
   ) {
     super(detail);
     this.name = "ApiError";
   }
+
+  /** True when the request never reached the API at all. */
+  get isOffline(): boolean {
+    return this.status === 0;
+  }
+
+  /** What to actually put in front of someone. */
+  get userMessage(): string {
+    if (this.isOffline) return OFFLINE_MESSAGE;
+    if (this.status >= 500) {
+      return this.requestId
+        ? `${this.detail} (reference ${this.requestId})`
+        : this.detail;
+    }
+    return this.detail;
+  }
 }
+
+export const OFFLINE_MESSAGE =
+  "Can't reach FinMentor. Check your connection and try again.";
 
 export interface TokenPair {
   access_token: string;
@@ -108,19 +129,42 @@ function shareRefresh(): Promise<string | null> {
   return refreshInFlight;
 }
 
-async function readError(response: Response): Promise<string> {
+/** What the API sends for every failure. See `app/api/errors.py`. */
+interface ErrorEnvelope {
+  error?: {
+    code?: string;
+    message?: string;
+    request_id?: string;
+    fields?: { field: string; message: string }[];
+  };
+  /** FastAPI's own shape, still produced by anything upstream of our handlers. */
+  detail?: string | { msg?: string }[];
+}
+
+/** A message a person can act on, plus the id they would quote to support. */
+async function readError(response: Response): Promise<{ detail: string; requestId?: string }> {
   try {
-    const body = await response.json();
-    const detail = body?.detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail) && detail.length) {
-      // FastAPI validation errors: surface the first field's message.
-      return detail.map((item: { msg?: string }) => item.msg ?? "invalid").join(", ");
+    const body = (await response.json()) as ErrorEnvelope;
+
+    if (body?.error) {
+      // Field errors first: "Email is not a valid address" beats "Some of that
+      // was not valid" when a form can point at the input.
+      const fields = body.error.fields;
+      const detail = fields?.length
+        ? fields.map((f) => `${f.field}: ${f.message}`).join("; ")
+        : body.error.message ?? "Something went wrong.";
+      return { detail, requestId: body.error.request_id };
+    }
+
+    const legacy = body?.detail;
+    if (typeof legacy === "string") return { detail: legacy };
+    if (Array.isArray(legacy) && legacy.length) {
+      return { detail: legacy.map((item) => item.msg ?? "invalid").join(", ") };
     }
   } catch {
-    /* not JSON */
+    /* not JSON — a proxy error page, or an empty body */
   }
-  return response.statusText || "something went wrong";
+  return { detail: response.statusText || "Something went wrong." };
 }
 
 interface RequestOptions {
@@ -143,15 +187,33 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-  let response = await send(anonymous ? null : accessToken);
+  // A failed `fetch` rejects rather than resolving — no server, DNS gone,
+  // request blocked. That is a different thing to a 500 and deserves a
+  // different sentence, so it becomes status 0 rather than an unhandled
+  // TypeError that renders as a blank screen.
+  let response: Response;
+  try {
+    response = await send(anonymous ? null : accessToken);
+  } catch {
+    throw new ApiError(0, OFFLINE_MESSAGE);
+  }
 
   if (response.status === 401 && !anonymous) {
     const fresh = await shareRefresh();
-    if (fresh) response = await send(fresh);
+    if (fresh) {
+      try {
+        response = await send(fresh);
+      } catch {
+        throw new ApiError(0, OFFLINE_MESSAGE);
+      }
+    }
   }
 
   if (response.status === 204) return undefined as T;
-  if (!response.ok) throw new ApiError(response.status, await readError(response));
+  if (!response.ok) {
+    const { detail, requestId } = await readError(response);
+    throw new ApiError(response.status, detail, requestId);
+  }
   return (await response.json()) as T;
 }
 
