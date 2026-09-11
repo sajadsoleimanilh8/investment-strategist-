@@ -52,7 +52,13 @@ export default defineConfig({
       env: {
         DEMO_MODE: "true",
         ENABLE_SCHEDULER: "false",
-        LOCAL_LLM_PROVIDER: "fake",
+        // The model is deliberately unreachable, not faked. The fake provider
+        // would let the Ask flow pass while proving nothing about what a user
+        // sees when Ollama is down — which is the Phase 5 guarantee this suite
+        // is here to check.
+        LOCAL_LLM_PROVIDER: "ollama",
+        OLLAMA_HOST: "http://127.0.0.1:1",
+        REMOTE_LLM_ENABLED: "false",
         AUTH_RATE_LIMIT_PER_MINUTE: "0",
         ASK_RATE_LIMIT_PER_MINUTE: "0",
         CORS_ORIGINS: `["http://127.0.0.1:${WEB_PORT}","http://localhost:${WEB_PORT}"]`,

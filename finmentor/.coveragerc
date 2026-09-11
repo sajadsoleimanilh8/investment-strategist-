@@ -1,0 +1,22 @@
+# Coverage settings for the deterministic core.
+#
+# `app/services` is the one package where a floor is meaningful: it computes
+# every number the product shows, it has no I/O, and an untested branch there
+# is a wrong figure on someone's dashboard rather than a cosmetic bug. It sits
+# at 100% and the CI job fails below it.
+#
+# The rest of the app is deliberately not floored. Delivery code is mostly
+# wiring, and a percentage target there buys tests written to move a number.
+
+[run]
+source = app/services
+branch = True
+
+[report]
+precision = 1
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    raise NotImplementedError

@@ -116,6 +116,31 @@ test.describe("signup to dashboard", () => {
     const whatIf = page.getByRole("table").filter({ hasText: "Saving each month" });
     await expect(whatIf.getByRole("cell", { name: "10,000,000" })).toBeVisible();
     await expect(whatIf.getByRole("cell", { name: "15,000,000" })).toBeVisible();
+
+    // --- market, with no external API -------------------------------------
+    await page.getByRole("link", { name: "Market" }).click();
+    await expect(page.getByRole("heading", { name: /everything i track/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add" }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Add" }).first().click();
+    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(1);
+
+    const market = page.getByRole("table").filter({ hasText: "7 days" });
+    await expect(market).toBeVisible();
+    await expect(market.locator(".delta-positive, .delta-negative").first()).toBeVisible();
+    await expect(page.getByText(/not a prediction or personalised/i).first()).toBeVisible();
+
+    // --- ask, with the model unreachable ----------------------------------
+    // The API's webServer points OLLAMA_HOST at a closed port, so this is the
+    // Phase 5 guarantee seen from a browser: the model is gone and the user
+    // still gets their real figures, labelled as the deterministic answer.
+    await page.getByRole("link", { name: "Ask" }).click();
+    await page.getByLabel(/your question/i).fill("why is my health score what it is?");
+    await page.getByRole("button", { name: "Ask" }).click();
+
+    const answer = page.getByRole("article").first();
+    await expect(answer).toBeVisible({ timeout: 30_000 });
+    await expect(answer).toContainText("62.3");
+    await expect(answer).toContainText(/model was unavailable/i);
   });
 
   test("a session survives a reload", async ({ page }) => {
