@@ -361,11 +361,30 @@ def auth_rate_limit(request: Request) -> None:
 
 
 def ask_rate_limit(current_user: CurrentUser) -> None:
-    """Per-user, on /ai/ask — the one route that costs a model call."""
+    """Per-user, on /ai/ask — the one route that costs a model call.
+
+    Per *user* rather than per address on purpose: a shared connection would
+    otherwise let one person's burst throttle everyone behind it.
+    """
     if not _allow("ask", str(current_user.id), settings.ask_rate_limit_per_minute):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="you are asking faster than I can think — give it a moment",
+        )
+
+
+def simulation_rate_limit(current_user: CurrentUser) -> None:
+    """Per-user, on /simulations.
+
+    Cheaper than a model call — no network, a few hundred microseconds of
+    arithmetic — but it writes a row per request, so an unbounded loop fills a
+    table rather than a queue. The same budget as /ask is generous for a person
+    and still bounds the damage.
+    """
+    if not _allow("simulation", str(current_user.id), settings.ask_rate_limit_per_minute):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="that is a lot of simulations at once — give it a moment",
         )
 
 

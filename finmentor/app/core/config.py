@@ -80,15 +80,27 @@ class Settings(BaseSettings):
     def jwt_secret_is_default(self) -> bool:
         return self.jwt_secret == "dev-only-not-a-secret-please-replace-me"
 
+    def check_production(self) -> None:
+        """Refuse to start on a configuration that is only safe for a demo.
+
+        A method rather than a few lines inside `get_settings` so it can be
+        tested directly, against a constructed Settings, without a subprocess
+        and a set of environment variables.
+        """
+        if self.demo_mode:
+            return
+        if self.jwt_secret_is_default:
+            raise RuntimeError(
+                "JWT_SECRET is still the development default. Generate one "
+                "with `python -c \"import secrets; print(secrets.token_hex(32))\"` "
+                "and put it in .env before running outside DEMO_MODE."
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    if not settings.demo_mode and settings.jwt_secret_is_default:
-        raise RuntimeError(
-            "JWT_SECRET is still the development default. Set a real one "
-            "before running outside DEMO_MODE."
-        )
+    settings.check_production()
     return settings
 
 

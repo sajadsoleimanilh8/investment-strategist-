@@ -54,7 +54,8 @@ def limiter(monkeypatch):
 
     keys = [
         security.rate_limit_key(TEST_CLIENT_IP, "auth"),
-        *[security.rate_limit_key(str(user_id), "ask") for user_id in range(1, 20)],
+        *[security.rate_limit_key(str(user_id), bucket)
+          for user_id in range(1, 20) for bucket in ("ask", "simulation")],
     ]
     client.delete(*keys)
 
@@ -200,3 +201,73 @@ def test_the_limiter_never_leaks_a_credential_into_its_key():
 
     assert key == "rl:auth:198.51.100.4"
     assert "@" not in key
+
+
+# --- /simulations is limited too -----------------------------------------
+
+def test_simulations_are_limited_per_user(raw_client, limiter, db, monkeypatch):
+    """Cheaper than a model call, but it writes a row per request — an
+    unbounded loop fills a table rather than a queue."""
+    from app.repositories import users as users_repo
+    from scripts.seed_demo_user import seed_demo_user
+
+    monkeypatch.setattr("app.repositories.profiles.current_period", lambda *a, **k: "2026-09")
+    tokens = signup(raw_client, 0).json()
+    user_id = security.decode_token(tokens["access_token"])
+    seed_demo_user(db, user=users_repo.get(db, user_id), period="2026-09")
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    payload = {"user_id": user_id, "kind": "what_if",
+               "params": {"monthly_savings_delta": 1_000_000}}
+
+    codes = [raw_client.post("/api/simulations", json=payload, headers=headers).status_code
+             for _ in range(LIMIT + 1)]
+
+    assert codes[-1] == 429
+    assert codes[:LIMIT] == [201] * LIMIT
+
+
+def test_the_simulation_refusal_is_worded_for_a_person(raw_client, limiter, db, monkeypatch):
+    from app.repositories import users as users_repo
+    from scripts.seed_demo_user import seed_demo_user
+
+    monkeypatch.setattr("app.repositories.profiles.current_period", lambda *a, **k: "2026-09")
+    tokens = signup(raw_client, 0).json()
+    user_id = security.decode_token(tokens["access_token"])
+    seed_demo_user(db, user=users_repo.get(db, user_id), period="2026-09")
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    payload = {"user_id": user_id, "kind": "what_if",
+               "params": {"monthly_savings_delta": 1_000_000}}
+    for _ in range(LIMIT + 1):
+        response = raw_client.post("/api/simulations", json=payload, headers=headers)
+
+    assert response.status_code == 429
+    assert "give it a moment" in error_message(response)
+
+
+def test_ask_and_simulations_have_separate_budgets(raw_client, limiter, db, monkeypatch):
+    """One bucket would let a busy simulator page lock someone out of asking a
+    question, which is a different feature failing for an unrelated reason."""
+    from app.repositories import users as users_repo
+    from scripts.seed_demo_user import seed_demo_user
+
+    monkeypatch.setattr("app.repositories.profiles.current_period", lambda *a, **k: "2026-09")
+    tokens = signup(raw_client, 0).json()
+    user_id = security.decode_token(tokens["access_token"])
+    seed_demo_user(db, user=users_repo.get(db, user_id), period="2026-09")
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    sim = {"user_id": user_id, "kind": "what_if",
+           "params": {"monthly_savings_delta": 1_000_000}}
+    for _ in range(LIMIT + 1):
+        raw_client.post("/api/simulations", json=sim, headers=headers)
+
+    asked = raw_client.post("/api/ai/ask",
+                            json={"user_id": user_id, "question": "how am I doing?"},
+                            headers=headers)
+
+    assert asked.status_code == 200

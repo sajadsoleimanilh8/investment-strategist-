@@ -13,7 +13,10 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, ValidationError
 
-from app.api.deps import CurrentUser, DbSession, OwnedUserId, assert_owns, load_twin, load_user, require_user
+from app.api.deps import (
+    CurrentUser, DbSession, OwnedUserId, assert_owns, load_twin, load_user,
+    require_user, simulation_rate_limit,
+)
 from app.repositories import goals as goals_repo
 from app.repositories import simulations as simulations_repo
 from app.schemas.simulation import WhatIfParams
@@ -84,7 +87,8 @@ def _as_jsonable(result: Any) -> Any:
     return result.model_dump(mode="json")
 
 
-@router.post("/simulations", status_code=status.HTTP_201_CREATED)
+@router.post("/simulations", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(simulation_rate_limit)])
 def create_simulation(payload: SimulationIn, db: DbSession,
                       current_user: CurrentUser) -> Any:
     """Run a scenario and persist both the params and the deterministic result."""
