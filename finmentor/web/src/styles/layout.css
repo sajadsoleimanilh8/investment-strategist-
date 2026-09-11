@@ -1,39 +1,62 @@
 /* ==========================================================================
-   THEME: user fills this in
+   THEME
    --------------------------------------------------------------------------
-   This file is STRUCTURE ONLY — flow, spacing, alignment. It sets no colour,
-   no font, no border style, no shadow, no radius.
+   The structure below is unchanged from the unstyled build: flow, spacing and
+   alignment only. Everything visual comes from the tokens in this block, which
+   is the whole point of the seam — a different palette is an edit here, not a
+   rewrite of the rules underneath.
 
-   The tokens below are the seam. They are declared and left empty on purpose:
-   fill them, and the structure below picks them up without being touched. Per
-   SPEC section 30 the intended direction is dark, with green/red/neutral for
-   financial deltas, reading as "trust, clarity, youth" — but that decision has
-   not been made yet and this phase must not pre-empt it.
+   The direction is SPEC section 30: dark, green/red/neutral for financial
+   deltas, reading as "trust, clarity, youth".
 
-   Until then the app renders in browser defaults. That is correct, not
-   unfinished.
+   Two constraints shaped the specific values.
+
+   Money is not a trading terminal. The accent is a muted slate-blue, not the
+   saturated cyan or lime a crypto dashboard would use — this is a tool for
+   someone learning where their salary goes, and an interface that looks like a
+   betting screen tells them the wrong thing about what they are doing.
+
+   Contrast is checked, not eyeballed. Every foreground below meets WCAG AA
+   against the surface it sits on at the size it is used — the deltas matter
+   most, because red-on-near-black is exactly the combination that fails, and a
+   number someone cannot read is a number that might as well be wrong.
+   `web/src/styles/contrast.test.ts` computes the ratios and fails the build if
+   one drops.
    ========================================================================== */
 
 :root {
-  /* colour */
-  --color-bg: ;
-  --color-surface: ;
-  --color-text: ;
-  --color-muted: ;
-  --color-border: ;
-  --color-accent: ;
-  --color-positive: ;   /* a delta in the user's favour */
-  --color-negative: ;   /* a delta against them */
-  --color-warning: ;
+  /* colour ------------------------------------------------------------------
+     Near-black rather than #000: pure black against bright text vibrates and
+     is tiring to read for long. #12151a is dark enough to read as dark and
+     soft enough to sit behind a page of numbers. */
+  --color-bg: #12151a;
+  --color-surface: #191d24;
+  --color-text: #e8eaed;
+  --color-muted: #9aa3af;
+  /* Light enough to actually divide something: #2a303a measured 1.27:1
+     against a card, which is a line most people cannot see. */
+  --color-border: #3a4350;
+  --color-accent: #6f9ceb;
 
-  /* type */
-  --font-body: ;
-  --font-heading: ;
-  --font-mono: ;
+  /* Deltas. Not the pure #00ff00 / #ff0000 pair: those fail contrast against a
+     dark ground and read as an alarm rather than information. These are
+     desaturated toward the background and both clear AA. */
+  --color-positive: #4ade80;   /* a delta in the user's favour */
+  --color-negative: #f87171;   /* a delta against them */
+  --color-warning: #fbbf24;
 
-  /* shape */
-  --radius: ;
-  --shadow: ;
+  /* type — system stacks only. A web font would mean a network fetch, and
+     DEMO_MODE has to run with no network at all. */
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, sans-serif;
+  --font-heading: var(--font-body);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+
+  /* shape — small radius and a soft shadow: "clean cards", not floating
+     glass panels. */
+  --radius: 8px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.25);
 
   /* spacing — the one scale the structure below actually depends on */
   --space-1: 0.25rem;
@@ -122,3 +145,111 @@ dl.pairs dd { margin: 0; }
 .delta-positive { color: var(--color-positive); }
 .delta-negative { color: var(--color-negative); }
 .disclaimer { color: var(--color-muted); max-width: var(--measure); }
+
+/* ==========================================================================
+   SKIN
+   --------------------------------------------------------------------------
+   Everything above this line is structure and is unchanged from the unstyled
+   build. Everything below sets only colour, type, border, radius and shadow on
+   selectors that already exist — no new layout, no new element, no change to
+   flow. Delete this block and the app still works, in browser defaults.
+   ========================================================================== */
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4 { font-family: var(--font-heading); line-height: 1.25; }
+h2 { font-size: 1.375rem; }
+h3 { font-size: 1.125rem; }
+
+a { color: var(--color-accent); }
+a:hover { text-decoration-thickness: 2px; }
+
+/* A visible focus ring on everything interactive. The browser default is
+   invisible against a dark ground, and losing it is losing keyboard use. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.app > header {
+  background: var(--color-surface);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.app > header nav a { text-decoration: none; }
+.app > header nav a:hover { text-decoration: underline; }
+
+footer {
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* ---- cards --------------------------------------------------------------
+   `section` and `fieldset` are the two containers the structure already uses
+   to group things, so they are what becomes a card. */
+
+section, fieldset {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+/* A section that only holds other sections should not be a card inside a card. */
+section:has(> section) { background: none; border: 0; box-shadow: none; padding: 0; }
+
+legend { color: var(--color-muted); font-size: 0.875rem; padding-inline: var(--space-2); }
+
+/* ---- forms -------------------------------------------------------------- */
+
+label { color: var(--color-muted); font-size: 0.875rem; }
+
+input, select, textarea {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-2);
+}
+
+input:focus, select:focus, textarea:focus { border-color: var(--color-accent); }
+
+button {
+  background: var(--color-accent);
+  color: #0b0e12;                /* dark-on-accent: 7.4:1, the readable way round */
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+/* A secondary button carries the same weight of meaning, less of the eye. */
+button[type="button"]:not(.primary) {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+/* ---- data --------------------------------------------------------------- */
+
+table { font-variant-numeric: tabular-nums; }
+thead th { color: var(--color-muted); font-size: 0.875rem; font-weight: 600; }
+tbody tr + tr { border-block-start: 1px solid var(--color-border); }
+
+dl.pairs dt { color: var(--color-muted); font-weight: 500; }
+
+/* ---- states -------------------------------------------------------------- */
+
+.disclaimer { font-size: 0.875rem; }
+[role="alert"] { color: var(--color-negative); }
+[role="status"] { color: var(--color-positive); }
