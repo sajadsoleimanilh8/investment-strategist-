@@ -176,11 +176,14 @@ row can hold either identity or both. Every route is guarded and a `{user_id}`
 belonging to someone else answers 403. The frontend calls the documented API
 and holds no logic of its own.
 
-*The visual design (§30) is **not** implemented.* The client ships with
-browser-default styling and a layout-only stylesheet whose design tokens are
-declared and left empty behind a `/* THEME: user fills this */` block. Routing,
-auth, forms, state and error handling are finished; the look is the one
-remaining decision, and it is deliberately still open.
+The visual design (§30) is implemented as of Phase 8: dark near-black ground,
+a muted slate-blue accent chosen to stay away from the trading-terminal look
+this section warns against, green/red deltas, system fonts only so a demo needs
+no network. The tokens live in one block at the top of
+`web/src/styles/layout.css` and a separate `SKIN` block applies them; the
+structural rules underneath are untouched, so a different palette is an edit to
+those tokens rather than a rewrite. `web/src/styles/contrast.test.ts` computes
+WCAG ratios from the tokens themselves and fails the build below AA.
 
 Plain English, simple terminology, on both.
 

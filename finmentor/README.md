@@ -11,45 +11,27 @@ English-only (see SPEC §31).
 
 ## Status
 
-Phases 1-5 done. **Phase 1:** Postgres-backed foundation — full ORM models, the
-initial Alembic migration, repositories, `POST/GET /api/users`, seeded demo user.
-**Phase 2:** the deterministic engine — Financial Twin from the database,
-Financial Health Score (5 x 20 points), Financial DNA bands, goal progress and
-ETA, budget stability against a planned budget, and all 12 `/learn` topics, with
-the profile / goals / health endpoints on top. No LLM is imported on any of
-those paths.
+**Complete — phases 0 through 8.** Two delivery surfaces over one deterministic
+core, 1048 tests, and a stack that comes up with one command.
 
-**Phase 3:** the simulation layer — what-if scenarios, the Financial Time
-Machine, the decision simulator, and a rule-based intent parser that turns
-free text into engine params (still regex and keywords, no LLM).
+![The dashboard](docs/screenshots/dashboard.png)
 
-**Phase 4:** the live market layer — `MarketDataProvider` abstraction with
-AlphaVantage / CoinGecko / Mock, a read-through cache into `market_snapshots`,
-an APScheduler refresh job, watchlist CRUD, and the market endpoints. Works
-fully offline in `DEMO_MODE`.
+| | |
+|---|---|
+| **Engine** | Financial Twin, health score (5 x 20), Financial DNA, goals, budget, 12 lessons. **100% statement and branch coverage.** No LLM on any of these paths. |
+| **Simulation** | what-if, time machine, decision simulator, and a rule-based intent parser — regex and keywords, no model. |
+| **Market** | Alpha Vantage / CoinGecko / Mock behind one interface, a read-through cache, a refresh job. Works fully offline. |
+| **AI** | `POST /api/ai/ask` hands the model a finished context and nothing else. Three tiers (hybrid → local → deterministic) and a safety layer that discards any answer containing a number it cannot trace back. |
+| **Telegram** | onboarding conversation, ten commands, one callback router. |
+| **Web** | argon2 + JWT, every route guarded, Redis rate limiting, Vite + React, dark theme with WCAG-checked contrast. |
+| **Deploy** | `docker compose up -d` → web, API, Postgres, Redis. Migrations run on boot. |
 
-**Phase 5:** the AI explanation layer — `POST /api/ai/ask` parses intent,
-assembles a deterministic context, and hands the model only that context and
-the question; a three-tier fallback (hybrid → local → deterministic
-passthrough) and a safety layer that drops buy/sell sentences and discards
-any answer containing a number that does not trace back to the context. Local
-model is stock `llama3.2:3b` via Ollama; `LOCAL_LLM_PROVIDER=fake` is the
-offline test double.
-
-**Phase 6:** the Telegram bot — an onboarding conversation, ten commands, and
-one inline-keyboard router. It is a thin delivery layer: message bodies are
-built by pure functions in `app/bot/views.py` from engine output, and `/ask`
-calls the same `app/api/ask.py` pipeline the HTTP route does.
-
-**Phase 7:** the web app — a second delivery surface over the same API. Real
-authentication (argon2 + JWT access/refresh), every route guarded and every
-`{user_id}` checked against the token, CORS, Redis rate limiting, and a
-Vite + React client covering the whole flow. The client is **deliberately
-unstyled**: structure, routing and state are finished, and the design tokens in
-`web/src/styles/layout.css` are declared and left empty for the visual design
-that has not been chosen yet.
-
-Remaining: that visual design, plus polish and deployment (phase 8).
+Three things are deliberately left open, and
+[`docs/ROADMAP.md`](docs/ROADMAP.md) says why: the live-API checks in
+[`docs/PRE_DEPLOY.md`](docs/PRE_DEPLOY.md), which need network this machine
+does not have; whether to move to `qwen2.5:7b`, which measured one probe better
+and inside the noise; and a guard so the Postgres test suite cannot drop the
+tables of whatever database it is pointed at.
 
 - Full spec: [`docs/SPEC.md`](docs/SPEC.md)
 - Phase plan: [`docs/ROADMAP.md`](docs/ROADMAP.md)
@@ -58,30 +40,72 @@ Remaining: that visual design, plus polish and deployment (phase 8).
 
 ## Quickstart
 
+### The whole thing, one command
+
 ```bash
-python -m venv .venv && . .venv/Scripts/activate     # Windows
+docker compose up -d
+```
+
+Web on <http://localhost:5173>, API on <http://localhost:8000>, Postgres and
+Redis behind them. From a clean checkout that is the entire setup — the schema
+migrates and the demo data seeds on boot. No `.env`, no API key, no network
+beyond pulling the base images.
+
+Walk it with [`docs/DEMO.md`](docs/DEMO.md).
+
+### Running it from your shell
+
+Infrastructure in Docker, the app on your machine — the usual dev loop:
+
+```bash
+cp .env.example .env
 pip install -r requirements.txt
-cp .env.example .env          # defaults run in DEMO_MODE with no external services
+docker compose up -d db redis
+alembic upgrade head
+python scripts/seed_demo_user.py && python scripts/seed_market_assets.py
 
-docker compose up -d          # Postgres + Redis (or point DATABASE_URL at your own)
-alembic upgrade head          # create the schema
-python scripts/seed_demo_user.py   # demo user (SPEC 29) + market assets + watchlist
-python -m scripts.fetch_market_snapshots   # warm the market cache (optional)
-
-pytest                        # engine + model + API tests (SQLite, no infra needed)
-uvicorn app.main:app --reload # API at http://localhost:8000/docs
-python -m app.bot.main        # Telegram bot (needs TELEGRAM_BOT_TOKEN)
+uvicorn app.main:app --reload          # API      :8000
+cd web && npm install && npm run dev   # web      :5173
+python -m app.bot.main                 # Telegram (needs TELEGRAM_BOT_TOKEN)
 ```
 
-Tests run against in-memory SQLite by default. To run the same suite against a
-real Postgres — which also enables the migration tests — point them at one:
+A local model is optional. Install [Ollama](https://ollama.com) and
+`ollama pull llama3.2:3b` for prose answers; without it the AI layer serves the
+same figures as a rendered table, which is the designed behaviour rather than a
+failure.
+
+### Tests
 
 ```bash
+pytest                                   # 1048 tests, SQLite, no infrastructure
 FINMENTOR_TEST_DATABASE_URL=postgresql+psycopg://finmentor:finmentor@localhost:5432/finmentor_test pytest
+pytest --cov --cov-fail-under=100        # the app/services floor
+
+cd web && npm test                       # 56 unit tests
+cd web && npm run test:e2e               # the browser flow (skips without a browser)
+
+scripts/ci_demo.sh                       # the gate: both surfaces, nothing external reachable
 ```
 
-Optional local LLM: install [Ollama](https://ollama.com), then
-`ollama pull llama3.2:3b`.
+> The Postgres suite **drops every table** in the database it points at. Use a
+> separate `finmentor_test` database — pointing it at a running stack's
+> database wipes that stack.
+
+### Deploying
+
+`docker-compose.yml` is a demo configuration. For production, override:
+
+| variable | why |
+|---|---|
+| `JWT_SECRET` | `python -c "import secrets; print(secrets.token_hex(32))"`. The app refuses to start on the development default with `DEMO_MODE=false`. |
+| `DEMO_MODE=false` | turns on the production guards and the real market providers |
+| `POSTGRES_PASSWORD` | the compose default is `finmentor` |
+| `CORS_ORIGINS` | the real web origin, never `*` |
+| `SEED_DEMO_DATA=false` | it creates a known user with a known telegram id |
+| `VITE_API_BASE_URL` | a **build** arg — Vite inlines it, so it cannot be changed on a running container |
+
+Then work through [`docs/PRE_DEPLOY.md`](docs/PRE_DEPLOY.md), which covers what
+CI cannot: the three live external APIs, HTTPS, and a restored backup.
 
 ## Layout
 
@@ -100,11 +124,17 @@ app/
   bot/        Telegram: handlers, callback router, onboarding conversation,
               inline keyboards, pure view builders, copy, formatting
 web/          the browser client (Vite + React + TypeScript) — see web/README.md
+  src/api/    one typed module per resource, over a client that refreshes on 401
+  src/auth/   token handling, the route guard
+  src/pages/  11 pages; src/styles/ holds the theme tokens and the skin
+  e2e/        the Playwright flow, and the screenshot generator
+docker/       entrypoint: wait for the database, migrate, then serve
+scripts/      seed_demo_user, fetch_market_snapshots, demo_check, ci_demo.sh
 scripts/ft/   local-model evaluation harness + the QLoRA fine-tune pipeline
 tests/        unit/ (engine, models, repos, config)  +  api/
-scripts/      seed_demo_user, fetch_market_snapshots
 migrations/   Alembic environment + versions
-docs/         SPEC, ROADMAP, ARCHITECTURE, DATA_MODEL
+docs/         SPEC, ROADMAP, ARCHITECTURE, DATA_MODEL, DEMO, PRE_DEPLOY
+Dockerfile    the API image; web/Dockerfile builds the client
 ```
 
 The v0 flat prototype was removed once every piece had been ported into
@@ -203,6 +233,45 @@ Only `/ask` and a free-text simulation reach a model (SPEC section 23);
 deterministic end to end, and a test asserts they never call the synthesizer.
 With Ollama stopped, `/ask` degrades to the verified figures and everything
 else is unaffected.
+
+## The web app
+
+```bash
+cd web && npm install && npm run dev        # :5173
+```
+
+A second delivery surface over the same API — `app/services`, `app/ai`,
+`app/market` are reused unchanged, and the Telegram bot keeps working
+throughout. Vite + React + TypeScript, TanStack Query, React Router. No UI
+library.
+
+Auth is argon2 for passwords and JWT for sessions: a 30-minute access token
+held **in memory only**, and a 14-day refresh token in `localStorage` that is
+rotated on every use. A token in storage is readable by any injected script; a
+token in a variable dies with the tab, which is the right trade for a
+short-lived credential.
+
+Every `/api/*` route except signup, login, refresh and `/healthz` requires a
+token, and every `{user_id}` is checked against it — a cross-user read is a 403,
+tested route by route.
+
+The theme lives entirely in the token block at the top of
+`web/src/styles/layout.css`. Colours, type, radius and shadow are declared
+there and applied by a separate `SKIN` block; the structure below neither knows
+nor cares. `contrast.test.ts` computes WCAG ratios from those tokens and fails
+the build if one drops below AA — which is how a border at 1.27:1 was caught
+before it shipped.
+
+![Green and red deltas on the watchlist](docs/screenshots/deltas.png)
+
+## Demo and deployment
+
+- [`docs/DEMO.md`](docs/DEMO.md) — a runbook for both surfaces, roughly eight
+  minutes, works with no internet
+- [`docs/PRE_DEPLOY.md`](docs/PRE_DEPLOY.md) — what a human has to verify that
+  CI cannot
+- [`scripts/ft/README.md`](scripts/ft/README.md) — how the local model was
+  chosen, including the fine-tune that was built, measured, and not shipped
 
 ## Product principle
 

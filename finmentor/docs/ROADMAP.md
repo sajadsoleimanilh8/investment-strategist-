@@ -214,23 +214,64 @@ not break it.
   learn + quiz -> `/ask`, which returned `source=deterministic` with the
   verified figures. Unauthenticated 401, cross-user 403.*
 
-## Phase 8 — Polish & Deploy
-- [ ] Visual design for `web/` — fill the token block in
-      `web/src/styles/layout.css`; the structure is built and waiting for it
-- [ ] Error handling + user-friendly messages everywhere (bot + web + API)
-- [ ] `DEMO_MODE` end-to-end pass with all external services off (CI check)
-- [ ] Full test suite green in CI; coverage on `app/services/*`
-- [ ] Deployment: Dockerfile(s), compose for api + web + db + redis,
-      `alembic upgrade` on boot
-- [ ] Pre-deploy manual checklist, all needing keys or network this machine
-      does not have: a real Alpha Vantage call, a real CoinGecko call, and a
-      real OpenAI/Anthropic call if the remote LLM is enabled. All three are
-      written and their fallbacks are tested; what is unverified is whether the
-      live responses still match the shape the parsers expect.
-- [ ] `JWT_SECRET` set to a real value — `get_settings()` refuses to start
-      outside DEMO_MODE while it is still the development default
-- [ ] Docs: finalise README, add screenshots / demo script
-- [ ] Optional: local-model fine-tune notes (financial tone / accuracy)
+## Phase 8 — Polish & Deploy  `[x]`
+- [x] Visual design for `web/` — the token block in `web/src/styles/layout.css`
+      is filled: dark near-black ground, muted slate-blue accent, green/red
+      deltas, system fonts only. `contrast.test.ts` computes WCAG ratios from
+      the tokens themselves and fails the build below AA, which caught a border
+      at 1.27:1 on the way in. Screenshots are generated, not pasted
+      (`npm run screenshots`).
+- [x] Error handling across all three surfaces. One API envelope
+      (`app/api/errors.py`); a 500 carries a request id and nothing else, and
+      tests plant a DSN, a token, a balance and a traceback to prove it. The
+      web client turns a failed fetch into a sentence rather than a blank
+      screen, and a dead session now redirects to login — `AuthContext` was
+      never subscribed to `onAuthChange`. The bot audit found no leak path and
+      left 19 tests so it stays that way.
+- [x] `DEMO_MODE` end-to-end pass with every external service off, both
+      surfaces: `scripts/ci_demo.sh`. The model is *unreachable*, not faked —
+      a fake would pass while proving nothing about the Phase 5 guarantee.
+- [x] Coverage on `app/services/*`: **100%**, statements and branches, floored
+      in `.coveragerc`. The gap was five defensive guards; they were tested,
+      not refactored away.
+- [x] Deployment: `Dockerfile` (multi-stage, non-root, 403 MB),
+      `web/Dockerfile` (nginx + static, 74 MB), compose for api + web + db +
+      redis with `alembic upgrade head` in the entrypoint and the API waiting
+      on the database healthcheck. `docker compose up -d` from a clean checkout
+      verified.
+- [ ] **Pre-deploy manual checklist — `docs/PRE_DEPLOY.md`. Still open, and
+      deliberately so.** A real Alpha Vantage call, a real CoinGecko call, and
+      a real OpenAI/Anthropic call if the remote LLM is enabled. All three
+      providers are written and their fallbacks are tested; what is unverified
+      is whether the live responses still match the shape the parsers expect.
+      This machine cannot reach any of them — the same network restriction that
+      blocked the qwen2.5:7b pull for two days — so they are a human checklist
+      rather than a fake green tick.
+- [x] `JWT_SECRET`: `Settings.check_production()` refuses to start outside
+      DEMO_MODE on the development default. Verified by hand in all three
+      states, and pinned by `tests/api/test_security_posture.py`.
+- [x] Rate limiting proven by burst against the running containers, not by
+      reading the code: auth throttles at 10/min per address, `/ask` and
+      `/simulations` at 20/min per *user* — a different user from the same
+      address is unaffected.
+- [x] Docs: README rewritten for the current architecture, `docs/DEMO.md` as a
+      runbook, screenshots in `docs/screenshots/`.
+- [x] Local-model fine-tune notes — `scripts/ft/README.md`. Built, evaluated,
+      and **not shipped**: stock `llama3.2:3b` beat it. The pipeline is
+      committed and repeatable.
+
+### What is left at the end of the project
+
+Three things, all needing a human with network access or a decision:
+
+1. **The live-API checks in `docs/PRE_DEPLOY.md`** (above).
+2. **`qwen2.5:7b` scored 21.0/22 against llama3.2:3b's 20.0** on the same
+   prompts — one probe better, inside the run-to-run noise, at 4.7 GB instead
+   of 2.0 GB. Worth 6-8 more runs before anyone switches. `LOCAL_LLM_MODEL`
+   stays `llama3.2:3b`.
+3. **The Postgres test suite drops every table in the database it points at.**
+   Running it against the database a demo stack is using wipes that stack; use
+   a separate `finmentor_test` database. Worth a guard rather than a docstring.
 
 ---
 

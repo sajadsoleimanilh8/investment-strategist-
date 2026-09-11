@@ -27,5 +27,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
+# 127.0.0.1, not localhost: that resolves to ::1 first and nginx's `listen 80`
+# binds IPv4 only, so the check is refused while the server is serving happily.
+# The container then sits unhealthy forever and anything waiting on
+# `service_healthy` never starts.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost/ >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
