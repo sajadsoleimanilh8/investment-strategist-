@@ -131,6 +131,45 @@ structural variety per task (the composer has 3-4 frames per slot; it needs
 more), and fewer epochs or a lower rank to stop it memorising. A teacher model
 larger than 3B would help most, and cannot be pulled on this machine.
 
+## qwen2.5:7b — measured, not adopted (2026-09-11)
+
+Evaluation only; `LOCAL_LLM_MODEL` stays `llama3.2:3b`. Same 22 probes, three
+runs, on the current (task-marked) prompts — the configuration that is live.
+Aggregated with `scorecard.py`, which keeps rows from different prompt versions
+apart:
+
+| model | runs | mean | spread | verdict | sides | grounded | no_advice | downgrades/run | sec | words |
+|---|---|---|---|---|---|---|---|---|---|---|
+| qwen2.5:7b [marked] | 3 | **21.00/22** (95%) | 20–22 | 37/39 | 15/15 | 66/66 | 66/66 | 0.67 | 3.0 | 49 |
+| llama3.2:3b [marked] | 4 | **20.00/22** (91%) | 19–21 | 51/52 | 20/20 | 88/88 | 88/88 | 1.25 | 2.6 | 59 |
+| llama3.2:3b [unmarked, 2026-09-10] | 3 | 21.00/22 (95%) | 19–22 | 39/39 | 15/15 | 66/66 | 66/66 | 0.33 | 2.6 | 55 |
+| finmentor-3b [unmarked, 2026-09-10] | 3 | 17.67/22 (80%) | 17–18 | 38/39 | 15/15 | 66/66 | 66/66 | 3.67 | 2.6 | 52 |
+
+The honest reading: **the 7B is one probe better on the mean, and that is
+inside the noise.** Single runs of the same model at temperature 0.3 swing by
+±2, and the 3B's own two marked/unmarked samples (20.0 and 21.0) differ by as
+much as the 7B beats it by. Both invent nothing and advise nothing on every
+answer across every run.
+
+Where they differ is in the detail. The 7B is terser (49 words vs 59) and
+downgraded about half as often (0.67 vs 1.25 per run) — fewer invented figures
+for safety to catch. Its three misses were two verdict slips and one data dump,
+all on chat probes (`chat_focus:demo` twice, `chat_what_should_i_buy` once),
+not the explain path.
+
+**Latency is not the objection it was expected to be.** 3.0 s against 2.6 s,
+about 15% slower on the RTX 5070 Ti — not the doubling predicted before it was
+measured. Memory is the real cost: 4.7 GB on disk against 2.0 GB, which matters
+for a GPU that may be shared with anything else.
+
+Getting it here was its own problem. `ollama pull` failed twice earlier (DNS,
+then a blocked socket), and this time the parallel downloader stalled at 0% for
+17 minutes while a single connection trickled at 0.1 MB/s. Throughput turned out
+to be bursty rather than blocked: 36 MB/s for a minute, then near-zero, with a
+server restart in between that the pull resumed from at 53%. Ollama's chunk
+tracker files are flushed only periodically, so a monitor reading them reports
+a stall while the download is running; read Ollama's own progress line instead.
+
 ## What is left, and what a fine-tune would buy
 
 Across six runs the residue is small and two-shaped:
