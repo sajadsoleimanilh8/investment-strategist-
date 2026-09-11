@@ -11,7 +11,7 @@ user refreshes, and it costs nothing.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession, auth_rate_limit
@@ -80,8 +80,12 @@ def refresh(payload: RefreshIn, db: DbSession) -> TokenPair:
     return _pair(user_id)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout() -> None:
+# `response_class=Response` and no return annotation: FastAPI reads `-> None`
+# as a response model, and a 204 may not have a body. Newer versions shrug at
+# this; the pinned one asserts at import, so the container would not start.
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT,
+             response_class=Response)
+def logout():
     """Nothing to do server-side: the client drops its tokens.
 
     Kept as a route so the client has one place to call, and so adding a

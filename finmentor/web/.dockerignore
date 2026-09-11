@@ -1,0 +1,17 @@
+# node_modules is never copied from the host: it may hold platform-specific
+# binaries built for a different OS. `npm ci` rebuilds it inside the image.
+node_modules/
+dist/
+
+.env
+.env.*
+!.env.example
+
+# Playwright output and the browser suite are not part of the bundle.
+test-results/
+playwright-report/
+blob-report/
+e2e/
+
+.git/
+*.log

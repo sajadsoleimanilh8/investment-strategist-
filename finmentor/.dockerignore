@@ -1,0 +1,42 @@
+# Nothing secret, nothing large, nothing host-specific reaches the image.
+
+# secrets — the container gets its configuration from the environment
+.env
+.env.*
+!.env.example
+
+# the frontend has its own image and its own context
+web/
+
+# training artefacts: gigabytes, and irrelevant to a running API
+data/
+models/
+outputs/
+*.gguf
+*.lora
+
+# host state
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# tests do not ship; they import dev-only dependencies the image lacks
+tests/
+
+# version control and editor noise
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+*.log
+
+# docs and screenshots are for humans reading the repo
+docs/
+README.md

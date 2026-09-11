@@ -1,5 +1,20 @@
-# Local dev infra only. The app itself runs with `uvicorn app.main:app` and
-# `python -m app.bot.main`. DEMO_MODE=true lets you skip this entirely.
+# The whole stack, one command:
+#
+#     docker compose up -d
+#
+# From a clean checkout that gives a working DEMO_MODE deployment — web on
+# :5173, API on :8000, Postgres and Redis behind them — with the schema
+# migrated and demo data seeded on boot. No .env needed, no external API key,
+# no network beyond pulling the base images.
+#
+# For infrastructure only (running the app from your shell, which is the usual
+# dev loop):
+#
+#     docker compose up -d db redis
+#
+# The defaults here are for a demo. Production overrides DEMO_MODE, JWT_SECRET,
+# the database password and CORS_ORIGINS — see the deployment section of the
+# README.
 services:
   db:
     image: postgres:16-alpine
@@ -18,6 +33,61 @@ services:
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        # Not `service_started`: the entrypoint runs migrations immediately,
+        # and Postgres accepts connections several seconds after the container
+        # starts. Waiting on the healthcheck is what makes `up -d` reliable
+        # rather than reliable-most-of-the-time.
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://finmentor:finmentor@db:5432/finmentor
+      REDIS_URL: redis://redis:6379/0
+      DEMO_MODE: "true"
+      ENABLE_SCHEDULER: "true"
+      # A demo secret, and only usable as one: `get_settings()` refuses to
+      # start with the development default unless DEMO_MODE is on.
+      JWT_SECRET: demo-only-not-a-secret-generate-a-real-one-for-production
+      CORS_ORIGINS: '["http://localhost:5173","http://127.0.0.1:5173"]'
+      # No Ollama in the stack. The AI layer degrades to the deterministic
+      # tier, which is the documented behaviour rather than a broken one — to
+      # use a local model, point this at a host running it.
+      LOCAL_LLM_PROVIDER: ollama
+      OLLAMA_HOST: http://host.docker.internal:11434
+      SEED_DEMO_DATA: "true"
+    ports: ["8000:8000"]
+    extra_hosts:
+      # So OLLAMA_HOST above can reach a model running on the host machine.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        # Baked in at build time: Vite inlines import.meta.env, so this cannot
+        # be changed later by an environment variable on the container. The
+        # browser calls the API directly, so this is the *browser's* view of
+        # the API — localhost, not the compose service name.
+        VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    ports: ["5173:80"]
+    restart: unless-stopped
 
 volumes:
   finmentor_pg:
