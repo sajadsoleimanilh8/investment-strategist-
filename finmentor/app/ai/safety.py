@@ -194,8 +194,23 @@ def ungrounded_numbers(text: str, context: Any) -> list[float]:
 
 
 def add_disclaimer(text: str, *, market_context: bool) -> tuple[str, bool]:
+    """Add the disclaimer — but only to a reply that actually makes a claim.
+
+    Every market answer gets one; the market disclaimer is about the *topic*,
+    not any specific figure. Off the market path, a disclaimer is only
+    warranted when the reply cites a figure — a greeting or "you're welcome!"
+    has nothing to disclaim, and stamping the same boilerplate onto every
+    message in a conversation is what made the guide read as a form letter
+    rather than a person. A real explanation almost always contains a number,
+    so this doesn't change behaviour on the precise (explain) path at all.
+    """
     disclaimer = MARKET_DISCLAIMER if market_context else FINANCE_DISCLAIMER
     if disclaimer in text:
+        return text, False
+    # An empty reply isn't "no claim" the way a greeting is — it's more likely
+    # something went wrong upstream, so it keeps the disclaimer rather than
+    # being treated as harmless small talk.
+    if not market_context and text.strip() and not numbers_in_text(text):
         return text, False
     return f"{text.strip()}\n\n⚠️ {disclaimer}", True
 

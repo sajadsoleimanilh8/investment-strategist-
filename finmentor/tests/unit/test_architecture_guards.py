@@ -212,12 +212,15 @@ def test_a_dead_model_makes_chat_raise_rather_than_invent():
 @pytest.mark.parametrize(
     "clause",
     [
-        "Never output a number that is not in the context",
-        "Do not compute new numbers",
-        "Never tell the user to buy, sell, or invest",
-        "unavailable, say that plainly",
-        "Do not promise or predict future returns",
-        "never as a forecast",
+        # Six properties that must survive any tone rewrite, however the
+        # wording changes (updated 2026-09-12 for the natural-persona rewrite
+        # — the properties are unchanged, only the phrasing is):
+        "Output a number that was not given to you",       # no invented numbers
+        "never calculate or estimate one yourself",         # no computing new ones
+        "buy, sell, or invest in a specific thing",         # no trade instructions
+        "say so plainly instead of",                        # missing data -> say so
+        "or promise a return",                              # no promised returns
+        "not a forecast",                                   # history != prediction
     ],
 )
 def test_the_system_prompt_keeps_every_safety_clause(clause):

@@ -208,12 +208,32 @@ def test_non_market_context_gets_the_finance_disclaimer():
 
 
 def test_add_disclaimer_is_idempotent():
-    once, added_first = add_disclaimer("text", market_context=False)
+    once, added_first = add_disclaimer("Your score is 62.3.", market_context=False)
     twice, added_again = add_disclaimer(once, market_context=False)
 
     assert added_first is True
     assert added_again is False
     assert once == twice
+
+
+def test_a_reply_with_no_financial_claim_gets_no_disclaimer():
+    """A greeting or 'you're welcome!' has nothing to disclaim. Stamping the
+    same boilerplate onto every message in a conversation is what made the
+    guide read as a form letter — see docs/ROADMAP.md, 2026-09-12."""
+    text, added = add_disclaimer("Hey! Good to see you again.", market_context=False)
+
+    assert added is False
+    assert text == "Hey! Good to see you again."
+    assert FINANCE_DISCLAIMER not in text
+
+
+def test_market_context_always_gets_the_disclaimer_even_with_no_numbers():
+    """The market disclaimer is about the topic, not any one figure — unlike
+    the finance disclaimer, it doesn't wait for a number to appear."""
+    text, added = add_disclaimer("Markets can be unpredictable.", market_context=True)
+
+    assert added is True
+    assert MARKET_DISCLAIMER in text
 
 
 # --- the report ---------------------------------------------------------

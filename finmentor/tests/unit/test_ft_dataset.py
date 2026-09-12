@@ -76,7 +76,7 @@ def test_a_two_sided_context_carries_its_labelled_block(population):
     payload = explain_payload("what if I save 1m more?", context)
 
     assert render_sides(context) in payload
-    assert payload.index("BEFORE") < payload.index("Context (")
+    assert payload.index("BEFORE") < payload.index("Figures (")
 
 
 def test_a_one_sided_context_leaves_no_hole(population):

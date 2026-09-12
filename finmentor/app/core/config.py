@@ -43,10 +43,12 @@ class Settings(BaseSettings):
     local_llm_model: str = "llama3.2:3b"
     ollama_host: str = "http://localhost:11434"
     local_llm_temperature: float = 0.3   # low: the model explains, it does not invent
-    #: hard ceiling on a model reply, independent of the prompt's own
-    #: "1-2 sentences" instruction — a model that ignores that instruction
-    #: should get cut off, not allowed to ramble to 400 tokens anyway.
-    ai_max_tokens: int = 160
+    #: ceiling on a model reply. The persona asks for "concise by default,
+    #: more when the topic needs it" rather than a fixed length, so this is a
+    #: runaway guard, not the normal-case target — high enough to let a real
+    #: deeper answer finish, low enough that a rambling one still gets cut off
+    #: rather than reaching 400+ tokens.
+    ai_max_tokens: int = 300
     #: how many past turns the free-chat path may see. Only the chat path has
     #: history at all — the precise paths (health, what-if, decision, market,
     #: education) stay stateless so the same question always gets the same

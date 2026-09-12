@@ -44,10 +44,13 @@ DETERMINISTIC_PREAMBLE = (
 HISTORY_CHAR_BUDGET = 1500
 NO_HISTORY = "(this is the start of the conversation)"
 
-#: Every prompt asks for 1-2 sentences; a live 7B answered that with 3-4 often
-#: enough that asking wasn't sufficient. Enforced here instead, the same way
-#: safety.enforce doesn't just ask the model not to invent numbers.
-MAX_SENTENCES = 2
+#: A backstop against genuine rambling, not the normal-case target — the
+#: prompts ask for "concise by default, more when the topic needs it" rather
+#: than a fixed length, so this only trims a reply that ran long regardless.
+#: (An earlier, stricter version of this hard-capped every reply to 2
+#: sentences; that fought the "go deeper when asked" persona directly and was
+#: loosened on 2026-09-12.)
+MAX_SENTENCES = 6
 
 
 def _cap_sentences(text: str, max_sentences: int = MAX_SENTENCES) -> str:

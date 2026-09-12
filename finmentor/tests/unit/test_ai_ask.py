@@ -363,7 +363,7 @@ def test_a_what_if_prompt_labels_both_sides(db, demo_user_id, monkeypatch):
 
     assert "BEFORE monthly_savings" in prompts[0]
     assert "AFTER monthly_savings" in prompts[0]
-    assert prompts[0].index("BEFORE") < prompts[0].index("Context ("), "sides come first"
+    assert prompts[0].index("BEFORE") < prompts[0].index("Figures ("), "sides come first"
 
 
 def test_a_purchase_prompt_labels_both_sides(db, demo_user_id, monkeypatch):
