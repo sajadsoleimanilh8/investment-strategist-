@@ -32,6 +32,7 @@ os.environ.setdefault("ASK_RATE_LIMIT_PER_MINUTE", "0")
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -42,14 +43,46 @@ from app.main import app as fastapi_app
 
 DEFAULT_TEST_DB_URL = "sqlite+pysqlite:///:memory:"
 
+#: Escape hatch for a real test database that, for whatever reason, cannot be
+#: named with "test" in it. Set to "1" to bypass the name check below.
+DESTRUCTIVE_OVERRIDE_ENV = "FINMENTOR_ALLOW_DESTRUCTIVE_TESTS"
+
 
 def database_url_for_tests() -> str:
     return os.getenv("FINMENTOR_TEST_DATABASE_URL", DEFAULT_TEST_DB_URL)
 
 
+def guard_destructive_target(url: str) -> None:
+    """Refuse to run the suite against anything that isn't obviously a test DB.
+
+    `db_engine` below calls `Base.metadata.drop_all` on whatever this URL
+    points at, twice per test. SQLite is always a private in-memory database,
+    so it's always safe. Postgres is a real, possibly-shared server — pointed
+    at the running demo stack by mistake (a copy-paste of `DATABASE_URL`
+    instead of `FINMENTOR_TEST_DATABASE_URL`, say), that isn't a test failure,
+    it's a wiped database. It happened once, mid–Phase 8. So: the database
+    name must contain "test", or you say so explicitly.
+    """
+    if url.startswith("sqlite"):
+        return
+    db_name = make_url(url).database or ""
+    if "test" in db_name.lower():
+        return
+    if os.getenv(DESTRUCTIVE_OVERRIDE_ENV) == "1":
+        return
+    raise RuntimeError(
+        f"Refusing to run the test suite against database {db_name!r}: its "
+        "name doesn't contain 'test', and this suite drops every table it "
+        "manages, twice per test. Point FINMENTOR_TEST_DATABASE_URL at a "
+        f"database named e.g. 'finmentor_test', or set "
+        f"{DESTRUCTIVE_OVERRIDE_ENV}=1 if you are certain."
+    )
+
+
 @pytest.fixture
 def db_engine():
     url = database_url_for_tests()
+    guard_destructive_target(url)
     kwargs = {}
     if url.startswith("sqlite"):
         kwargs = {"connect_args": {"check_same_thread": False}, "poolclass": StaticPool}
