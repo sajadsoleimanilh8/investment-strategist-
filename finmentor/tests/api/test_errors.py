@@ -223,15 +223,21 @@ def test_the_validation_handler_avoids_version_fragile_status_constants():
     """
     import pathlib
 
-    source = pathlib.Path(__file__).resolve().parents[2] / "app" / "api" / "errors.py"
-    text = source.read_text(encoding="utf-8")
+    # The whole package, not just errors.py: the first version of this guard
+    # checked one file and three other call sites went on raising the same
+    # AttributeError.
+    app = pathlib.Path(__file__).resolve().parents[2] / "app"
+    offenders = {
+        path.relative_to(app).as_posix(): name
+        for path in app.rglob("*.py")
+        for name in ("HTTP_422_UNPROCESSABLE_CONTENT", "HTTP_422_UNPROCESSABLE_ENTITY")
+        if name in path.read_text(encoding="utf-8")
+    }
 
-    assert "HTTP_422_UNPROCESSABLE_CONTENT" not in text, (
-        "this name does not exist in the pinned Starlette; use the literal 422"
-    )
-    assert "HTTP_422_UNPROCESSABLE_ENTITY" not in text, (
-        "and this one is deprecated in the newer Starlette — the literal works "
-        "in both"
+    assert offenders == {}, (
+        f"{offenders}: ..._CONTENT does not exist in the pinned Starlette and "
+        "..._ENTITY is deprecated in the newer one. The literal 422 is correct "
+        "in both."
     )
 
 

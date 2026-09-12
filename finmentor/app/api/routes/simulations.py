@@ -49,7 +49,7 @@ class SimulationRecord(BaseModel):
 
 
 def _bad_params(detail: str) -> HTTPException:
-    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail)
+    return HTTPException(status_code=422, detail=detail)   # literal: see errors.py
 
 
 def _run(db, payload: SimulationIn) -> Any:

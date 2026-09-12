@@ -71,7 +71,7 @@ def submit_quiz(key: str, payload: QuizIn, user: CurrentUser, db: DbSession) -> 
     topic = _load_topic(key)
     quiz = topic["quiz"]
     if payload.answer_idx >= len(quiz["options"]):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+        raise HTTPException(422,   # literal: the constant differs by Starlette version, see errors.py
                             "that option does not exist")
 
     correct = payload.answer_idx == quiz["answer_idx"]

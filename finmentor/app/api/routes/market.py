@@ -89,7 +89,7 @@ def add_to_watchlist(user_id: OwnedUserId, payload: WatchlistIn, db: DbSession) 
     asset = market_repo.get_asset(db, payload.symbol)
     if asset is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=422,   # the literal: Starlette renamed this constant, see errors.py
             detail=f"unknown symbol: {payload.symbol}",
         )
     market_repo.add_to_watchlist(db, user_id, asset.symbol)
