@@ -207,3 +207,39 @@ def test_an_http_exception_detail_is_scrubbed_on_the_way_out():
 
     detail = f"upstream said: {DSN}"
     assert "hunter2" not in scrub_text(str(HTTPException(502, detail).detail))
+
+
+# --- the constant that only exists in a newer Starlette -------------------
+
+def test_the_validation_handler_avoids_version_fragile_status_constants():
+    """`HTTP_422_UNPROCESSABLE_CONTENT` is a newer Starlette name. The pinned
+    FastAPI ships a Starlette without it, so referencing it raised an
+    AttributeError *inside the exception handler* — every validation error in
+    the shipped container became a 500, and the whole field-level 422 body was
+    dead code there.
+
+    Nothing caught it because the local environment runs a newer FastAPI than
+    requirements.txt pins. The literal is version-proof; the name is not.
+    """
+    import pathlib
+
+    source = pathlib.Path(__file__).resolve().parents[2] / "app" / "api" / "errors.py"
+    text = source.read_text(encoding="utf-8")
+
+    assert "HTTP_422_UNPROCESSABLE_CONTENT" not in text, (
+        "this name does not exist in the pinned Starlette; use the literal 422"
+    )
+    assert "HTTP_422_UNPROCESSABLE_ENTITY" not in text, (
+        "and this one is deprecated in the newer Starlette — the literal works "
+        "in both"
+    )
+
+
+def test_an_invalid_body_is_a_422_not_a_500(raw_client):
+    """The behaviour the constant broke: a bad email is a validation error the
+    form can act on, not a server failure."""
+    response = raw_client.post("/api/auth/signup",
+                               json={"email": "not-an-email", "password": "short"})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"

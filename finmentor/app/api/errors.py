@@ -111,7 +111,10 @@ def install(app: FastAPI) -> None:
             for error in exc.errors()
         ]
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            # The literal, not a constant: Starlette renamed this to
+            # ..._CONTENT and deprecated ..._ENTITY, so either name is
+            # wrong on one side of the pinned version. 422 is not.
+            status_code=422,
             content=error_body(422, "Some of that was not valid.", rid, fields=fields),
             headers={"X-Request-ID": rid},
         )
