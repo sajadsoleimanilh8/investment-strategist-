@@ -51,10 +51,26 @@ PARSE_MODE = "Markdown"
 # --- plumbing -----------------------------------------------------------
 
 async def _reply(update: Update, text: str, keyboard=None) -> None:
-    await update.effective_message.reply_text(
-        text, parse_mode=PARSE_MODE, reply_markup=keyboard,
-        disable_web_page_preview=True,
-    )
+    """Send `text` as Markdown, falling back to plain text if it won't parse.
+
+    Most of `text` is hand-authored and its Markdown is deliberate. But some
+    of it is dynamic — a model answer, a safety-downgraded context render, a
+    user-entered goal name — and any of those can carry a stray `_`/`*`/`` ` ``
+    Telegram's legacy parser can't balance. That is a formatting accident, not
+    a reason to lose the answer: retry once as plain text rather than raise.
+    """
+    try:
+        await update.effective_message.reply_text(
+            text, parse_mode=PARSE_MODE, reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
+    except BadRequest as exc:
+        if "can't parse entities" not in str(exc).lower():
+            raise
+        log.warning("markdown parse failed, resending as plain text: %s", exc)
+        await update.effective_message.reply_text(
+            text, reply_markup=keyboard, disable_web_page_preview=True,
+        )
 
 
 async def _edit(update: Update, text: str, keyboard=None) -> None:
