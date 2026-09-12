@@ -262,16 +262,26 @@ not break it.
 
 ### What is left at the end of the project
 
-Three things, all needing a human with network access or a decision:
+One thing, needing a human with network access:
 
 1. **The live-API checks in `docs/PRE_DEPLOY.md`** (above).
-2. **`qwen2.5:7b` scored 21.0/22 against llama3.2:3b's 20.0** on the same
-   prompts — one probe better, inside the run-to-run noise, at 4.7 GB instead
-   of 2.0 GB. Worth 6-8 more runs before anyone switches. `LOCAL_LLM_MODEL`
-   stays `llama3.2:3b`.
-3. **The Postgres test suite drops every table in the database it points at.**
-   Running it against the database a demo stack is using wipes that stack; use
-   a separate `finmentor_test` database. Worth a guard rather than a docstring.
+
+Both other items resolved after the project's "done" point:
+
+- **`LOCAL_LLM_MODEL` switched to `qwen2.5:7b`** (2026-09-12), decided without
+  the extra 6-8 runs the scorecard called for — the 3-run scores (95% vs 91%)
+  were close enough, and the deciding factor was qwen2.5:7b's lower
+  safety-downgrade rate (0.67 vs 1.25 per run: it invents fewer figures for
+  `safety.enforce` to catch), not the top-line score. Cost: 4.7 GB resident
+  instead of 2.0 GB, latency ~2.6s warm (measured, not the predicted 2x).
+  Set in `docker-compose.yml`'s `api` service and `.env`/`.env.example`;
+  `llama3.2:3b` and the `finmentor-3b` fine-tune both still work by changing
+  one value, no code change. See `scripts/ft/README.md` for the full scorecard.
+- **The Postgres test-suite guard.** `tests/conftest.py::guard_destructive_target`
+  now refuses to run against a Postgres database whose name doesn't contain
+  "test" (`FINMENTOR_ALLOW_DESTRUCTIVE_TESTS=1` overrides it). SQLite is
+  always exempt. Verified live: pointed at the real `finmentor` database, every
+  DB-touching test fails fast before connecting instead of dropping tables.
 
 ---
 

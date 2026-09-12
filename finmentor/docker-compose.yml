@@ -66,6 +66,11 @@ services:
       # use a local model, point this at a host running it.
       LOCAL_LLM_PROVIDER: ollama
       OLLAMA_HOST: http://host.docker.internal:11434
+      # qwen2.5:7b, not the 3B: see scripts/ft/README.md for the probe
+      # scorecard (95% vs 91%, both within the noise of a 3-run sample, but
+      # fewer safety downgrades per run — it invents fewer figures for
+      # safety.enforce to catch). +15% latency, 4.7 GB vs 2.0 GB resident.
+      LOCAL_LLM_MODEL: qwen2.5:7b
       SEED_DEMO_DATA: "true"
     ports: ["8000:8000"]
     extra_hosts:

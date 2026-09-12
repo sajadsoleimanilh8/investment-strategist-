@@ -26,12 +26,12 @@ core, 1048 tests, and a stack that comes up with one command.
 | **Web** | argon2 + JWT, every route guarded, Redis rate limiting, Vite + React, dark theme with WCAG-checked contrast. |
 | **Deploy** | `docker compose up -d` → web, API, Postgres, Redis. Migrations run on boot. |
 
-Three things are deliberately left open, and
-[`docs/ROADMAP.md`](docs/ROADMAP.md) says why: the live-API checks in
+One thing is deliberately left open — the live-API checks in
 [`docs/PRE_DEPLOY.md`](docs/PRE_DEPLOY.md), which need network this machine
-does not have; whether to move to `qwen2.5:7b`, which measured one probe better
-and inside the noise; and a guard so the Postgres test suite cannot drop the
-tables of whatever database it is pointed at.
+does not have. The local model is `qwen2.5:7b` (switched from `llama3.2:3b`;
+one env var, see [`docs/ROADMAP.md`](docs/ROADMAP.md) for why), and the
+Postgres test suite now refuses to run against anything that isn't obviously
+a test database.
 
 - Full spec: [`docs/SPEC.md`](docs/SPEC.md)
 - Phase plan: [`docs/ROADMAP.md`](docs/ROADMAP.md)
