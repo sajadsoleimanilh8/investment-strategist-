@@ -43,7 +43,10 @@ class Settings(BaseSettings):
     local_llm_model: str = "llama3.2:3b"
     ollama_host: str = "http://localhost:11434"
     local_llm_temperature: float = 0.3   # low: the model explains, it does not invent
-    ai_max_tokens: int = 400
+    #: hard ceiling on a model reply, independent of the prompt's own
+    #: "1-2 sentences" instruction — a model that ignores that instruction
+    #: should get cut off, not allowed to ramble to 400 tokens anyway.
+    ai_max_tokens: int = 160
     #: how many past turns the free-chat path may see. Only the chat path has
     #: history at all — the precise paths (health, what-if, decision, market,
     #: education) stay stateless so the same question always gets the same

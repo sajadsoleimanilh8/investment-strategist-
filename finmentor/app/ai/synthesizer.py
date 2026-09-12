@@ -30,6 +30,7 @@ from app.ai.prompts import (
     TASK_CHAT, TASK_EXPLAIN,
 )
 from app.ai.rendering import render_context, render_sides
+from app.ai.safety import split_sentences
 
 log = logging.getLogger("finmentor.ai")
 
@@ -43,9 +44,23 @@ DETERMINISTIC_PREAMBLE = (
 HISTORY_CHAR_BUDGET = 1500
 NO_HISTORY = "(this is the start of the conversation)"
 
+#: Every prompt asks for 1-2 sentences; a live 7B answered that with 3-4 often
+#: enough that asking wasn't sufficient. Enforced here instead, the same way
+#: safety.enforce doesn't just ask the model not to invent numbers.
+MAX_SENTENCES = 2
+
+
+def _cap_sentences(text: str, max_sentences: int = MAX_SENTENCES) -> str:
+    """Keep only the first `max_sentences`. A model draft with no sentence-ending
+    punctuation at all (rare) is returned whole rather than dropped to nothing."""
+    sentences = split_sentences(text)
+    return " ".join(sentences[:max_sentences]).strip() or text
+
 
 def _finish(text: str, *, source: str, context: dict, market_context: bool) -> dict:
     """The one exit point. Everything user-facing leaves through safety.enforce."""
+    if source != "deterministic":          # the context render isn't prose to trim
+        text = _cap_sentences(text)
     clean, report = safety.enforce(text, context=context, market_context=market_context)
     if report["downgraded"]:
         log.warning("ai answer downgraded: ungrounded numbers %s", report["ungrounded_numbers"])

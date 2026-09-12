@@ -41,6 +41,14 @@ FIXTURES = [
     ("why did my score drop?", "health", None, None, None),
     ("how is my financial health?", "health", None, None, None),
     ("what is the price of bitcoin?", "market", None, None, None),
+    ("how is btc doing", "market", None, None, None),
+    # --- a definitional question with no curated topic must NOT become a
+    # market lookup just because it names an asset (live bug: "what is
+    # bitcoin?" returned a raw BTC price/trend dump instead of an answer) —
+    # it goes to the guide instead, same as any other unparsed message.
+    ("what is bitcoin?", "smalltalk", None, None, None),
+    ("what does crypto mean?", "smalltalk", None, None, None),
+    ("what is ethereum?", "smalltalk", None, None, None),
     # --- ambiguous / garbage: must come back unparsed ------------------
     ("asdkjhasd", "smalltalk", None, None, None),
     ("hello there", "smalltalk", None, None, None),

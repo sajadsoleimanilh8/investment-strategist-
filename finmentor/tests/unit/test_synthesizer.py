@@ -188,3 +188,48 @@ def test_the_numbers_are_identical_across_tiers(monkeypatch, market_context):
 
     assert local["used_context"] == deterministic["used_context"] == CONTEXT
     assert "62.3" in local["text"] and "62.3" in deterministic["text"]
+
+
+# --- brevity: the prompts ask for 1-2 sentences, this makes it true ------
+
+def test_a_rambling_model_reply_is_cut_to_two_sentences(monkeypatch):
+    monkeypatch.setattr(
+        FakeLocalProvider, "generate",
+        lambda self, prompt, system=None: (
+            "Your score is 62.3, which is good. Your savings rate is strong "
+            "at 35%. Your emergency fund is weak at 6.1 points. You have one "
+            "active goal worth tracking."
+        ),
+    )
+    result = synthesizer.explain("how am I doing?", CONTEXT)
+
+    prose = result["text"].split("\n\n")[0]     # strip the appended disclaimer
+    assert prose == "Your score is 62.3, which is good. Your savings rate is strong at 35%."
+
+
+def test_the_deterministic_render_is_not_trimmed(monkeypatch):
+    """The no-model tier shows every figure — capping that would hide numbers,
+    not just prose, since the render has no sentence-ending punctuation to
+    split on in the first place."""
+    monkeypatch.setattr(FakeLocalProvider, "unavailable", True)
+
+    result = synthesizer.explain("how am I doing?", CONTEXT)
+
+    assert "financial_health_score" in result["text"].lower().replace(" ", "_") \
+        or "62.3" in result["text"]
+    assert "savings" in result["text"].lower()
+
+
+def test_cap_sentences_returns_short_text_unchanged():
+    from app.ai.synthesizer import _cap_sentences
+
+    assert _cap_sentences("One sentence only.") == "One sentence only."
+
+
+def test_cap_sentences_never_drops_to_nothing():
+    """Text with no sentence-ending punctuation at all is kept whole rather
+    than reduced to an empty string."""
+    from app.ai.synthesizer import _cap_sentences
+
+    text = "financial health score 62 savings rate 35 percent emergency 6 points"
+    assert _cap_sentences(text) == text

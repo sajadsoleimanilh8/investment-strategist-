@@ -63,8 +63,13 @@ _EXPENSE_CATEGORIES = (
 _DECISION_HINTS = ("should i buy", "can i afford", "buy a", "buy the", "worth buying")
 _WHAT_IF_HINTS = ("what if", "what happens if", "if i ", "suppose i ", "imagine i ")
 _WHAT_IF_LEVERS = ("save", "saving", "income", "salary", "earn", "expense", "spend", "spending")
-_MARKET_HINTS = ("price of", "market", "trend", "stock", "crypto", "bitcoin", "ethereum",
-                 "how is btc", "watchlist")
+#: Names an asset class without asking for its data. "what is bitcoin?" wants
+#: a definition; these words alone don't tell you the person wants a lookup.
+_MARKET_ASSET_HINTS = ("stock", "crypto", "bitcoin", "ethereum")
+#: Asks for data, however it's phrased. "what is the price of bitcoin?" still
+#: means "look it up" even though it also matches an education hint below.
+_MARKET_ACTION_HINTS = ("price of", "market", "trend", "how is btc", "watchlist")
+_MARKET_HINTS = _MARKET_ASSET_HINTS + _MARKET_ACTION_HINTS
 _HEALTH_HINTS = ("score", "financial health", "how am i doing", "my health")
 _EDUCATION_HINTS = ("what does", "what is", "what's", "explain", "mean", "meaning of",
                     "teach me", "learn about")
@@ -197,6 +202,26 @@ def parse(text: str) -> ParsedIntent:
     if any(hint in lowered for hint in _HEALTH_HINTS):
         return ParsedIntent(intent="health", raw=raw, confidence=STRONG_MATCH,
                             matched=["health"])
+
+    # A definitional question about something we have no curated topic for
+    # ("what is bitcoin?", "what does crypto mean?") must not fall through to
+    # market just because it names an asset. Live bug: "what is bitcoin?"
+    # matched `_MARKET_HINTS` on "bitcoin" and got a raw price/trend dump
+    # instead of an answer to the question actually asked. `_find_topic`
+    # already failed above (this branch only runs when `topic is None`), so
+    # there is nothing precise to hand the engine — send it to the guide,
+    # which can define the term from its own general knowledge, no numbers
+    # required.
+    #
+    # Only the bare asset name makes this ambiguous. "what is the PRICE of
+    # bitcoin?" still means "look it up" despite matching "what is" too, so an
+    # explicit action hint (price of / market / trend / ...) always wins.
+    if (
+        topic is None
+        and any(hint in lowered for hint in _EDUCATION_HINTS)
+        and not any(hint in lowered for hint in _MARKET_ACTION_HINTS)
+    ):
+        return llm_fallback(raw)
 
     if any(hint in lowered for hint in _MARKET_HINTS):
         return ParsedIntent(intent="market", raw=raw, confidence=WEAK_MATCH,
