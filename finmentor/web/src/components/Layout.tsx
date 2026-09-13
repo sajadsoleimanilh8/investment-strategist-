@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const LINKS = [
-  ["/", "Dashboard"],
+  ["/dashboard", "Dashboard"],
   ["/goals", "Goals"],
   ["/simulate", "Simulate"],
   ["/market", "Market"],
@@ -25,12 +25,12 @@ export function Layout() {
   return (
     <div className="app">
       <header>
-        <Link to="/"><h1>FinMentor</h1></Link>
+        <Link to="/dashboard"><h1>FinMentor</h1></Link>
         <nav aria-label="Main">
           <ul>
             {LINKS.map(([to, label]) => (
               <li key={to}>
-                <NavLink to={to} end={to === "/"}>{label}</NavLink>
+                <NavLink to={to} end={to === "/dashboard"}>{label}</NavLink>
               </li>
             ))}
           </ul>

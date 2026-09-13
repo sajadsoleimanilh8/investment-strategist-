@@ -35,7 +35,8 @@ test.describe("signup to dashboard", () => {
     const address = email();
 
     // --- the guard, before anything else ---------------------------------
-    await page.goto("/");
+    // "/" is now the public landing page; the guard lives on "/dashboard".
+    await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
 
     // --- signup ----------------------------------------------------------
@@ -175,7 +176,9 @@ test.describe("signup to dashboard", () => {
     await page.getByRole("button", { name: /sign out/i }).click();
     await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
 
-    await page.goto("/");
+    // The dashboard still demands a session; the public landing page at "/"
+    // doesn't, so that's not a useful place to re-check the guard.
+    await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
   });
 });

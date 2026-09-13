@@ -15,7 +15,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to={location.state?.from ?? "/"} replace />;
+  if (user) return <Navigate to={location.state?.from ?? "/dashboard"} replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -23,7 +23,7 @@ export function Login() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate(location.state?.from ?? "/", { replace: true });
+      navigate(location.state?.from ?? "/dashboard", { replace: true });
     } catch (caught) {
       setError(messageFor(caught));
     } finally {

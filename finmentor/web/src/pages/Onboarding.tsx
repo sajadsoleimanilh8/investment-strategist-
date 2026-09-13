@@ -103,7 +103,7 @@ export function Onboarding() {
       }
 
       await refreshUser();
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } catch (caught) {
       setError(messageFor(caught));
     } finally {
