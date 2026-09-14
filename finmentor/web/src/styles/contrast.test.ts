@@ -22,9 +22,9 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "layout.css"), "utf8");
 
-/** WCAG 2.1: 4.5:1 for body text, 3:1 for large text (>=18.66px bold or 24px). */
+/** WCAG 2.1: 4.5:1 for body text. Nothing here relies on the 3:1 large-text
+ * allowance — the ramp clears the body floor everywhere, at every size. */
 const AA_BODY = 4.5;
-const AA_LARGE = 3;
 /** Non-text UI (borders, focus rings) needs 3:1 against what it sits on. */
 const AA_NON_TEXT = 3;
 
@@ -71,26 +71,23 @@ describe("the ratio function itself", () => {
   });
 });
 
+/** The three-step type ramp: white headlines, mist body, graphite captions. */
+const FOREGROUNDS = ["color-text", "color-mist", "color-muted", "color-accent"] as const;
+
 describe("text on the page background", () => {
-  it.each([
-    ["text", AA_BODY],
-    ["muted", AA_BODY],
-    ["accent", AA_BODY],
-  ])("--color-%s clears %s:1", (name, floor) => {
-    expect(ratio(token(name === "text" ? "color-text" : `color-${name}`),
-                 token("color-bg"))).toBeGreaterThanOrEqual(floor);
+  it.each(FOREGROUNDS)("--%s clears AA for body text", (name) => {
+    expect(ratio(token(name), token("color-bg"))).toBeGreaterThanOrEqual(AA_BODY);
   });
 });
 
-describe("text on a card surface", () => {
-  // Cards are a shade lighter than the page, so every ratio is slightly worse
-  // there. Checking only against --color-bg would miss it.
-  it.each([
-    ["color-text", AA_BODY],
-    ["color-muted", AA_BODY],
-    ["color-accent", AA_BODY],
-  ])("%s clears %s:1", (name, floor) => {
-    expect(ratio(token(name), token("color-surface"))).toBeGreaterThanOrEqual(floor);
+describe("text on the raised surfaces", () => {
+  // Cards and input wells are a shade lighter than the page, so every ratio is
+  // slightly worse there. Checking only against --color-bg would miss it.
+  it.each(
+    FOREGROUNDS.flatMap((fg) =>
+      (["color-surface", "color-elevated"] as const).map((bg) => [fg, bg] as const)),
+  )("--%s on --%s clears AA for body text", (fg, bg) => {
+    expect(ratio(token(fg), token(bg))).toBeGreaterThanOrEqual(AA_BODY);
   });
 });
 
@@ -129,11 +126,20 @@ describe("non-text UI", () => {
       .toBeGreaterThanOrEqual(AA_NON_TEXT);
   });
 
-  it("button text is readable on the accent it sits on", () => {
-    // Dark-on-accent, which is the readable way round for a mid-tone accent.
-    const label = css.match(/color:\s*(#[0-9a-fA-F]{6});\s*\/\* dark-on-accent/);
+  it("button text is readable on the ghost button it sits on", () => {
+    // Buttons carry no fill in this system: the label sits on the canvas
+    // colour, inside a pill outline. That makes the label/canvas pair the one
+    // to check — there is no accent fill to check against.
+    const label = css.match(/color:\s*(#[0-9a-fA-F]{6});\s*\/\* ghost label on ink/);
     expect(label, "the button label colour moved or lost its marker").toBeTruthy();
-    expect(ratio(label![1], token("color-accent"))).toBeGreaterThanOrEqual(AA_LARGE);
+    expect(ratio(label![1], token("color-bg"))).toBeGreaterThanOrEqual(AA_BODY);
+  });
+
+  it("the pill outline is visible against the canvas behind it", () => {
+    // Shape is how a control announces itself here, so the outline drawing
+    // that shape has to be perceivable, not merely present.
+    expect(ratio(token("color-border"), token("color-bg")))
+      .toBeGreaterThanOrEqual(1.3);
   });
 });
 

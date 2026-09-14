@@ -20,6 +20,10 @@ class Settings(BaseSettings):
 
     # background jobs (off under pytest; see tests/conftest.py)
     enable_scheduler: bool = True
+    #: the public live-price WebSocket's poll loop (app.market.live). Off
+    #: under pytest and in the e2e webServer, same reasoning as DEMO_MODE:
+    #: no external API on a path tests depend on being deterministic.
+    enable_market_live: bool = True
 
     # presentation
     currency_symbol: str = "$"

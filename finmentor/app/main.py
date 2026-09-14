@@ -15,6 +15,7 @@ from app.api import errors
 from app.api.routes import ALL_ROUTERS
 from app.core.config import settings
 from app.core.logging import configure_logging, safe_json
+from app.market.live import hub as market_live_hub
 
 log = logging.getLogger("finmentor.api")
 
@@ -40,11 +41,15 @@ def _start_scheduler() -> BackgroundScheduler:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = _start_scheduler() if settings.enable_scheduler else None
+    if settings.enable_market_live:
+        market_live_hub.start()
     try:
         yield
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        if settings.enable_market_live:
+            await market_live_hub.stop()
 
 
 def create_app() -> FastAPI:

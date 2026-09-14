@@ -6,15 +6,19 @@
    is the whole point of the seam — a different palette is an edit here, not a
    rewrite of the rules underneath.
 
-   The direction is SPEC section 30: dark, green/red/neutral for financial
-   deltas, reading as "trust, clarity, youth".
+   The direction is SPEC section 30 (dark; green/red/neutral for financial
+   deltas; "trust, clarity, youth"), rendered in the nocturnal-terminal idiom:
+   a matte-black canvas, one typographic voice doing all the work, and colour
+   spent only where it carries meaning — a delta's direction, a status, the one
+   accented word in a headline. Depth comes from a single deep black halo, not
+   from stacked elevation. Controls are pills; content cards are 16px.
 
    Two constraints shaped the specific values.
 
-   Money is not a trading terminal. The accent is a muted slate-blue, not the
-   saturated cyan or lime a crypto dashboard would use — this is a tool for
-   someone learning where their salary goes, and an interface that looks like a
-   betting screen tells them the wrong thing about what they are doing.
+   Money is not a trading terminal. Chroma is rationed: white and grey carry
+   the interface, and blue/green/orange appear only as signal. An app that
+   looks like a betting screen tells someone learning where their salary goes
+   the wrong thing about what they are doing.
 
    Contrast is checked, not eyeballed. Every foreground below meets WCAG AA
    against the surface it sits on at the size it is used — the deltas matter
@@ -26,37 +30,76 @@
 
 :root {
   /* colour ------------------------------------------------------------------
-     Near-black rather than #000: pure black against bright text vibrates and
-     is tiring to read for long. #12151a is dark enough to read as dark and
-     soft enough to sit behind a page of numbers. */
-  --color-bg: #12151a;
-  --color-surface: #191d24;
-  --color-text: #e8eaed;
-  --color-muted: #9aa3af;
-  /* Light enough to actually divide something: #2a303a measured 1.27:1
-     against a card, which is a line most people cannot see. */
-  --color-border: #3a4350;
-  --color-accent: #6f9ceb;
+     A matte near-black, not pure #000: pure black against bright text
+     vibrates and is tiring to read across a page of numbers, and the warmer
+     near-black is what makes an accent read as deliberately switched on.
+
+     Three surfaces, one tonal step apart, are the whole depth model:
+     canvas → card → elevated. Anything needing more separation than that gets
+     the halo shadow, not a fourth colour. */
+  --color-bg: #0b0b0b;        /* canvas  — the page */
+  --color-surface: #191919;   /* card    — sections, fieldsets */
+  --color-elevated: #131313;  /* nested  — input wells, inner panels */
+
+  /* Type is a three-step ramp and nothing more. White is reserved for
+     headlines and primary values; grey does the rest, which is what keeps a
+     dense screen from shouting every figure at once. */
+  --color-text: #ffffff;      /* headlines, primary values */
+  --color-mist: #cccccc;      /* body prose, tertiary emphasis */
+  --color-muted: #868f97;     /* labels, captions, secondary information */
+
+  --color-border: #333333;
+
+  /* --color-accent is the navigation/link blue. It is a *location* colour —
+     current page, focus ring, the thing about to be acted on — and is
+     deliberately never used to mean good-or-bad; that job belongs to the
+     delta pair below, and giving one colour both jobs makes both ambiguous. */
+  --color-accent: #479ffa;
+
+  /* Ember: the warm highlight. One accented word in a headline, a caution
+     state — never a decorative fill. */
+  --color-brand: #ffa16c;
+  /* The gradient terminus for the rare warm wash. Decorative only; nothing
+     ever sits on it as text. */
+  --color-brand-deep: #551b10;
 
   /* Deltas. Not the pure #00ff00 / #ff0000 pair: those fail contrast against a
      dark ground and read as an alarm rather than information. These are
-     desaturated toward the background and both clear AA. */
-  --color-positive: #4ade80;   /* a delta in the user's favour */
-  --color-negative: #f87171;   /* a delta against them */
-  --color-warning: #fbbf24;
+     desaturated toward the background, both clear AA on card and canvas, and
+     sit far enough apart in luminance to stay distinguishable from each other
+     for someone who does not separate them by hue. */
+  --color-positive: #4ebe96;   /* a delta in the user's favour */
+  --color-negative: #ef5a4e;   /* a delta against them */
+  --color-warning: #ffa16c;
 
   /* type — system stacks only. A web font would mean a network fetch, and
-     DEMO_MODE has to run with no network at all. */
+     DEMO_MODE has to run with no network at all. The reference voice is a
+     compressed geometric sans; system-ui is the closest thing available
+     without a fetch, and the character comes from the tracking below rather
+     than from the face itself. */
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
                Arial, sans-serif;
   --font-heading: var(--font-body);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                "Liberation Mono", monospace;
 
-  /* shape — small radius and a soft shadow: "clean cards", not floating
-     glass panels. */
-  --radius: 8px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.25);
+  /* Tracking is the signature move: display sizes are pulled tight so a short
+     statement compresses into a confident block. It works only *because* the
+     sizes are large — nothing at body size is tracked at all. */
+  --tracking-display: -0.05em;
+  --tracking-heading: -0.03em;
+
+  /* shape — pills for anything actionable, 16px for anything holding content.
+     The pill is load-bearing identity, not rounding for its own sake: shape
+     alone is what marks a control here, because the buttons carry no fill. */
+  --radius: 16px;         /* content cards */
+  --radius-sm: 10px;      /* inputs, inner panels, tags */
+  --radius-pill: 99px;    /* every interactive control */
+
+  /* One deep halo instead of layered elevation. The card is dark; the shadow
+     is what makes it read as floating rather than as a painted rectangle. */
+  --shadow: 0 0 44px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 1px 0 rgb(0 0 0 / 0.85), 0 0 14px rgb(255 255 255 / 0.25);
 
   /* spacing — the one scale the structure below actually depends on */
   --space-1: 0.25rem;
@@ -157,13 +200,29 @@ dl.pairs dd { margin: 0; }
 
 body {
   background: var(--color-bg);
-  color: var(--color-text);
+  color: var(--color-mist);
   font-family: var(--font-body);
+  font-weight: 400;
+  /* Tabular figures everywhere by default. This is an app made of numbers
+     that change in place; proportional digits make a value jitter sideways
+     every time it ticks. */
+  font-variant-numeric: tabular-nums;
 }
 
-h1, h2, h3, h4 { font-family: var(--font-heading); line-height: 1.25; }
-h2 { font-size: 1.375rem; }
-h3 { font-size: 1.125rem; }
+/* Headlines are white, weight 400, and tracked tight. Weight does very little
+   of the work — the size and the tracking do it, which is what keeps a heading
+   authoritative rather than loud. */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  color: var(--color-text);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-heading);
+}
+h1 { letter-spacing: var(--tracking-display); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.125rem; line-height: 1.32; }
+h4 { font-size: 1rem; letter-spacing: normal; }
 
 a { color: var(--color-accent); }
 a:hover { text-decoration-thickness: 2px; }
@@ -175,13 +234,47 @@ a:hover { text-decoration-thickness: 2px; }
   outline-offset: 2px;
 }
 
+/* ---- top bar ------------------------------------------------------------
+   A minimal bar: mark, links, account. No glow, no fill — a hairline is the
+   only thing separating it from the canvas, which is what keeps the canvas
+   feeling continuous down the page. */
 .app > header {
-  background: var(--color-surface);
+  background: var(--color-bg);
   border-block-end: 1px solid var(--color-border);
 }
 
-.app > header nav a { text-decoration: none; }
-.app > header nav a:hover { text-decoration: underline; }
+.app > header h1 { letter-spacing: var(--tracking-heading); }
+.app > header a { text-decoration: none; }
+
+/* Nav items are pills: no fill, no border, shape and colour only. The active
+   page is marked by a blue underline — location, not status. */
+.app > header nav a {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.app > header nav a:hover { color: var(--color-text); text-decoration: none; }
+.app > header nav a[aria-current="page"] {
+  color: var(--color-text);
+  position: relative;
+}
+.app > header nav a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: var(--space-2); right: var(--space-2); bottom: -2px;
+  height: 1px;
+  background: var(--color-accent);
+}
+
+.whoami { color: var(--color-muted); font-size: 0.875rem; }
+
+/* Transitions for these live in motion.css, so there is one owner for how
+   the app moves rather than a duration sprinkled at each call site. */
+button:active:not(:disabled) { transform: translateY(1px); }
 
 footer {
   border-block-start: 1px solid var(--color-border);
@@ -191,11 +284,12 @@ footer {
 
 /* ---- cards --------------------------------------------------------------
    `section` and `fieldset` are the two containers the structure already uses
-   to group things, so they are what becomes a card. */
+   to group things, so they are what becomes a card. The halo, not a lighter
+   border, is what lifts them. */
 
 section, fieldset {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: var(--space-4);
@@ -204,52 +298,86 @@ section, fieldset {
 /* A section that only holds other sections should not be a card inside a card. */
 section:has(> section) { background: none; border: 0; box-shadow: none; padding: 0; }
 
-legend { color: var(--color-muted); font-size: 0.875rem; padding-inline: var(--space-2); }
+legend {
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-inline: var(--space-2);
+}
 
 /* ---- forms -------------------------------------------------------------- */
 
 label { color: var(--color-muted); font-size: 0.875rem; }
 
+/* Inputs are wells, not raised fields: a step *down* from the card they sit
+   in, which is the same depth logic the surfaces use. */
 input, select, textarea {
-  background: var(--color-bg);
+  background: var(--color-elevated);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   padding: var(--space-2);
 }
 
 input:focus, select:focus, textarea:focus { border-color: var(--color-accent); }
+input::placeholder, textarea::placeholder { color: var(--color-muted); }
 
+/* Buttons carry no fill. There is no chromatic CTA colour in this system — an
+   action is defined by its pill shape and a soft white halo, and the halo is
+   what separates the primary action from the rest without introducing a colour
+   that would then compete with the deltas for meaning. */
 button {
-  background: var(--color-accent);
-  color: #0b0e12;                /* dark-on-accent: 7.4:1, the readable way round */
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  color: #ffffff;                /* ghost label on ink: 19.7:1 */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-4);
   cursor: pointer;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-glow);
 }
 
-button:hover { filter: brightness(1.08); }
-button:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+button:hover { border-color: var(--color-mist); }
+button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
-/* A secondary button carries the same weight of meaning, less of the eye. */
+/* A secondary button carries the same weight of meaning, less of the eye: it
+   loses the halo and keeps the shape. */
 button[type="button"]:not(.primary) {
   background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border);
+  color: var(--color-muted);
+  box-shadow: none;
 }
+button[type="button"]:not(.primary):hover { color: var(--color-text); }
 
 /* ---- data --------------------------------------------------------------- */
 
 table { font-variant-numeric: tabular-nums; }
-thead th { color: var(--color-muted); font-size: 0.875rem; font-weight: 600; }
+thead th {
+  color: var(--color-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 tbody tr + tr { border-block-start: 1px solid var(--color-border); }
+tbody td { color: var(--color-mist); }
+/* A figure gets full white — it is the thing being read. A figure that is a
+   *delta* keeps its direction colour instead: the `:not()` is what stops this
+   rule, which is more specific than `.delta-positive`, from quietly repainting
+   every gain and loss the same shade of white. */
+td.numeric:not(.delta-positive):not(.delta-negative) { color: var(--color-text); }
 
-dl.pairs dt { color: var(--color-muted); font-weight: 500; }
+dl.pairs dt { color: var(--color-muted); font-weight: 400; font-size: 0.875rem; }
+dl.pairs dd { color: var(--color-text); }
+
+/* A figure is the loudest thing on the screen, and it gets there by size and
+   tracking rather than by colour — the same move as the headlines. */
+.money { letter-spacing: var(--tracking-heading); }
 
 /* ---- states -------------------------------------------------------------- */
 
-.disclaimer { font-size: 0.875rem; }
+.disclaimer { font-size: 0.8125rem; }
 [role="alert"] { color: var(--color-negative); }
 [role="status"] { color: var(--color-positive); }

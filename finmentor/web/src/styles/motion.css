@@ -1,0 +1,191 @@
+/* ==========================================================================
+   MOTION
+   --------------------------------------------------------------------------
+   The motion vocabulary, in one place, so the whole app moves like one thing.
+
+   The reference points are the products that move money for a living —
+   Stripe, Robinhood, Bloomberg, Wise, Coinbase — and the striking thing about
+   all of them is how little they move. None of them pin a section, hijack a
+   scroll or parallax a background. What they animate is *state*: a number
+   that changed, a value that arrived, a panel that is about to be readable.
+   Motion is used to answer "what just happened?", never to decorate.
+
+   So this file borrows four specific devices and nothing else:
+
+     · the tick flash          (Robinhood)  a price that changes flashes its
+                                            direction for a beat, so a change
+                                            you weren't looking at is still a
+                                            change you noticed.
+     · the count-up            (Wise)       a headline figure counts to its
+                                            value on arrival, which reads as
+                                            "this was computed", not "this was
+                                            printed".
+     · the staggered entrance  (Coinbase)   cards resolve in sequence rather
+                                            than snapping in as a wall.
+     · the shimmer             (Stripe)     a pending surface breathes, so a
+                                            slow request looks busy instead of
+                                            broken.
+
+   And it deliberately refuses the things those sites do *not* do, which the
+   UX guidance also rates as high-severity harm: no scroll-jacking, no
+   parallax, no pinned sections, no infinite decorative loops, nothing that
+   keeps moving after it has settled.
+
+   Everything here collapses to its final, readable state under
+   prefers-reduced-motion — see the block at the foot of this file.
+   ========================================================================== */
+
+:root {
+  /* Duration is a function of what the motion is *for*, not one number reused
+     everywhere. A press has to echo instantly or it feels broken; an entrance
+     that fast reads as a flicker. Four steps is enough to cover the app, and
+     naming them by purpose is what stops the next person reaching for a
+     magic number. */
+  --motion-instant: 90ms;    /* the UI acknowledging a press */
+  --motion-quick: 160ms;     /* hover, colour, border */
+  --motion-moderate: 280ms;  /* an element entering or leaving */
+  --motion-slow: 520ms;      /* a section resolving, a line drawing itself */
+  --motion-tick: 420ms;      /* how long a changed value stays lit */
+  --motion-count: 900ms;     /* a headline figure counting to its value */
+
+  --stagger-step: 45ms;      /* between siblings in one entrance */
+
+  /* Decelerating curves only. Things arrive and settle; nothing in a finance
+     app should accelerate away from the reader. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Overshoot, for controls only. Never on a figure or a table row: a number
+     that bounces past its value and comes back is a number that looked, for a
+     frame, like a different number. */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* ---- the tick flash -----------------------------------------------------
+   A value that changed lights up in its own direction and fades back. The
+   colour is the same token the delta already uses, so the flash and the
+   steady state are never telling different stories. Applied by useValueFlash,
+   which removes the class once the beat is over. */
+
+.flash-up   { animation: flashUp var(--motion-tick) var(--ease-out); }
+.flash-down { animation: flashDown var(--motion-tick) var(--ease-out); }
+
+@keyframes flashUp {
+  from { color: var(--color-positive); }
+  to   { color: inherit; }
+}
+@keyframes flashDown {
+  from { color: var(--color-negative); }
+  to   { color: inherit; }
+}
+
+/* ---- the staggered entrance ---------------------------------------------
+   Children resolve in sequence. The offset is 8px, not 40: at display sizes
+   a large travel distance reads as a slide, and a slide reads as a website.
+   Eight pixels reads as a fade that happens to have a direction.
+
+   Capped at eight children on purpose — past that the last card arrives late
+   enough to feel like a bug rather than a flourish. Anything beyond the
+   eighth simply appears with the eighth. */
+
+.stagger > * {
+  animation: enter var(--motion-moderate) var(--ease-out) backwards;
+}
+.stagger > *:nth-child(1) { animation-delay: calc(var(--stagger-step) * 0); }
+.stagger > *:nth-child(2) { animation-delay: calc(var(--stagger-step) * 1); }
+.stagger > *:nth-child(3) { animation-delay: calc(var(--stagger-step) * 2); }
+.stagger > *:nth-child(4) { animation-delay: calc(var(--stagger-step) * 3); }
+.stagger > *:nth-child(5) { animation-delay: calc(var(--stagger-step) * 4); }
+.stagger > *:nth-child(6) { animation-delay: calc(var(--stagger-step) * 5); }
+.stagger > *:nth-child(7) { animation-delay: calc(var(--stagger-step) * 6); }
+.stagger > *:nth-child(n + 8) { animation-delay: calc(var(--stagger-step) * 7); }
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* A route change reuses that same entrance rather than getting a device of
+   its own: Layout puts `.stagger` on a pathname-keyed `main`, so navigating
+   resolves the new page card by card. Deliberately no slide — a slide implies
+   a spatial relationship between two screens, and Dashboard is not to the
+   left of Goals. */
+
+/* ---- the shimmer --------------------------------------------------------
+   Anything still waiting breathes. This hangs off `aria-busy`, which the app
+   already sets, so a pending surface is styled by the same attribute that
+   announces it to a screen reader — the visual and the accessible state
+   cannot drift apart, because they are the same declaration.
+
+   This is the one infinite animation in the app, and the guidance is explicit
+   that loading is the only thing that earns one. It stops the moment the
+   attribute comes off. */
+
+[aria-busy="true"] {
+  color: var(--color-muted);
+  animation: shimmer 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ---- micro-interactions -------------------------------------------------
+   A control has to answer immediately. These are the shortest durations in
+   the file because anything slower than about a tenth of a second stops
+   reading as a response and starts reading as lag. */
+
+button {
+  transition:
+    border-color var(--motion-quick) var(--ease-out),
+    color var(--motion-quick) var(--ease-out),
+    box-shadow var(--motion-quick) var(--ease-out),
+    transform var(--motion-instant) var(--ease-out);
+}
+
+.app > header nav a {
+  transition: color var(--motion-quick) var(--ease-out);
+}
+
+/* A field answers focus by brightening its edge rather than by growing: a
+   border that changes width reflows the text inside it. */
+input, select, textarea {
+  transition:
+    border-color var(--motion-quick) var(--ease-out),
+    background-color var(--motion-quick) var(--ease-out);
+}
+
+/* The active-page underline grows from the centre instead of blinking on. */
+.app > header nav a[aria-current="page"]::after {
+  animation: underline var(--motion-moderate) var(--ease-out);
+  transform-origin: center;
+}
+
+@keyframes underline {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+
+/* ==========================================================================
+   Reduced motion.
+   --------------------------------------------------------------------------
+   Not "slower" and not "fewer" — off, with the final state rendered
+   immediately. Everything above is non-essential by construction: no
+   information in this app is carried by movement alone, so removing all of it
+   costs a reader nothing. The count-up and the in-view reveal opt out on the
+   JS side too (useCountUp, useInView), because a timer cannot be turned off
+   by a media query.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The shimmer would otherwise settle at whichever opacity the single
+     0.01ms iteration happened to land on. */
+  [aria-busy="true"] { opacity: 1; }
+}

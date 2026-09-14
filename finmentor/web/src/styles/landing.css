@@ -1,328 +1,417 @@
 /* ==========================================================================
-   Landing page theme.
+   Landing page.
    --------------------------------------------------------------------------
-   Deliberately separate from layout.css: the dashboard's slate-blue "trust,
-   clarity, youth" palette is right for a screen full of someone's numbers,
-   but wrong for the public front door, which is trying to earn the click
-   that gets them signing up in the first place. Everything here is scoped
-   under `.landing` so it can never bleed into the authenticated app, and
-   so it always wins over layout.css's global `body`/`h1..h4`/`a` rules
-   (class + type beats type alone on specificity).
+   Structure only — every colour, font and radius here is a `--color-*` /
+   `--font-*` / `--radius*` / `--tracking-*` token from layout.css. That's
+   deliberate: the brief asked for one cohesive visual system across the whole
+   site, and the easiest way to guarantee that is to not give this page a
+   second palette to drift out of sync with the first. system-ui only, same as
+   the rest of the app (no web-font fetch either place).
+
+   The idiom is the same nocturnal terminal the app uses: matte-black canvas,
+   white type doing the talking, cards that float on a black halo rather than
+   on a lighter fill, and exactly one chromatic accent per block.
    ========================================================================== */
 
 .landing {
-  --bg: #0a0b09;
-  --surface: #101210;
-  --surface-2: #171a15;
-  --line: rgba(232, 230, 220, 0.10);
-  --line-strong: rgba(232, 230, 220, 0.18);
-  --text: #ece9de;
-  --text-dim: #8f8d80;
-  --text-faint: #5c5b52;
-  --emerald-deep: #0c2b21;
-  --emerald: #1f6e4f;
-  --emerald-bright: #2f9c70;
-  --gold: #c9a463;
-  --gold-bright: #ddc088;
-
-  position: relative;
-  background: var(--bg);
-  color: var(--text);
-  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 16px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
   min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-mist);
 }
 
-.landing *, .landing *::before, .landing *::after { box-sizing: border-box; }
-.landing ::selection { background: var(--emerald); color: var(--bg); }
+.landing a { color: var(--color-accent); }
 
-.landing .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 24px; }
-
-.landing h1, .landing h2, .landing h3, .landing h4 {
-  font-family: "Unbounded", "Manrope", sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-wrap: balance;
-  margin: 0;
-  line-height: 1.1;
+/* The app shell turns every `section` into a card, because inside the app a
+   section *is* a grouped panel. On the landing page a section is a band of the
+   page, so the card comes off again and only the one panel that is genuinely a
+   product surface — the live market — puts it back on, below. Same reason the
+   status colour is reset: `[role="status"]` means "live region" here, not
+   "good news", and the app's green would be saying something the state isn't. */
+.landing section {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
+.landing [role="status"] { color: var(--color-muted); }
 
-.landing .mono {
-  font-family: "JetBrains Mono", monospace;
-  font-variant-numeric: tabular-nums;
-}
+/* ---- nav: same visual language as the authenticated app's header ----
 
-.landing a { color: inherit; text-decoration: none; }
+   It sticks, and it changes state, but it never hides. The pattern that
+   reveals a header only after the hero was considered and rejected: the one
+   affordance this page exists to offer is "Sign up", and hiding it to buy a
+   cleaner first screen trades the page's purpose for its looks.
 
-/* ---------- Nav ---------- */
-.landing .nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 50;
+   What it does instead is lose its ground. Over the intro the bar is bare —
+   the mark and the links sit directly on the canvas, so the statement below
+   them opens the page uninterrupted. Once the intro is past, the bar takes a
+   surface and a border and reads as chrome over the content scrolling under
+   it. Both borders are declared, one of them transparent, so gaining it
+   costs no layout shift. */
+.landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 28px;
-  background: linear-gradient(to bottom, rgba(10,11,9,0.75), transparent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s linear;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: transparent;
+  border-block-end: 1px solid transparent;
+  transition: background-color var(--motion-moderate) var(--ease-out),
+              border-color var(--motion-moderate) var(--ease-out);
 }
-.landing .nav.is-visible { pointer-events: auto; }
-.landing .nav-mark {
-  font-family: "Unbounded", sans-serif;
+.landing-nav.is-grounded {
+  background: var(--color-bg);
+  border-block-end-color: var(--color-border);
+}
+
+/* The state change is information, not decoration: under reduced motion it
+   still happens, it just happens at once. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-nav { transition: none; }
+}
+
+/* The element the nav watches. One pixel tall, not zero: a zero-area target
+   has an intersection ratio of 0 both inside and outside the viewport, so the
+   observer has no threshold to cross on the way back in and the nav keeps its
+   grounded state all the way to the top of the page. Giving it real height
+   makes the ratio actually change, which is what makes the state reversible.
+   Verified in the browser — it was a zero-height div first, and it stuck. */
+.landing-sentinel { height: 1px; }
+.landing-nav__mark {
+  color: var(--color-text);
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: var(--tracking-heading);
+}
+.landing-nav nav { display: flex; align-items: center; gap: var(--space-3); }
+.landing-nav nav a {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  transition: color var(--motion-quick) var(--ease-out);
+}
+.landing-nav nav a:hover { color: var(--color-text); text-decoration: none; }
+
+/* The one control in the bar that is an action rather than a link. It is not
+   a filled button — this system has no CTA fill colour — it is the pill
+   shape plus the white halo, which is the whole vocabulary for "press this". */
+.landing a.landing-nav__cta {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  text-decoration: none;
+  font-weight: 500;
+  box-shadow: var(--shadow-glow);
+  transition: border-color var(--motion-quick) var(--ease-out);
+}
+.landing a.landing-nav__cta:hover { border-color: var(--color-mist); text-decoration: none; color: var(--color-text); }
+
+/* The landing page is full-bleed: sections set their own measure, so the
+   app shell's reading-width cap has to come off. Scoped to `.landing` rather
+   than written as a bare `main` — bare, it ties for specificity with
+   layout.css's `main` rule and the winner is then whichever stylesheet Vite
+   happens to inject last. */
+.landing main { display: block; max-width: none; padding: 0; }
+
+/* ---- intro: a compact statement, not a hero. No full-viewport section,
+   no forced scroll before the actual page begins. ---- */
+.landing-intro {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3) var(--space-4);
+  text-align: center;
+}
+
+/* The signature typographic move: a short statement at display size, tracked
+   tight enough that the words compress into one confident block. Weight stays
+   at 400 — the size and the tracking carry it, not the ink. The full stop is
+   deliberate punctuation, not an accident of the copy. */
+.landing-intro h1 {
+  font-size: clamp(2rem, 5.5vw, 3.25rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: var(--tracking-display);
+  color: var(--color-text);
+  margin: 0 0 var(--space-3);
+}
+
+/* One word, one colour, once. The eye lands on it and then reads the rest in
+   white — which only works while the rule is kept to a single word per
+   headline, so there is exactly one of these on the page. */
+.landing-accent { color: var(--color-brand); }
+
+.landing-intro p { color: var(--color-muted); margin: 0 auto; max-width: 60ch; }
+.landing-intro__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* Both buttons are pills with no fill. The primary is separated from the
+   secondary by its halo and its ink background, not by colour — same rule as
+   the app's `button`. */
+.landing a.landing-btn {
+  display: inline-block;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid var(--color-border);
+  transition: border-color var(--motion-quick) var(--ease-out), color var(--motion-quick) var(--ease-out), transform var(--motion-instant) var(--ease-out);
+}
+.landing a.landing-btn:hover { text-decoration: none; }
+.landing a.landing-btn:active { transform: translateY(1px); }
+.landing a.landing-btn--primary {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-glow);
+}
+.landing a.landing-btn--primary:hover { border-color: var(--color-mist); color: var(--color-text); }
+.landing a.landing-btn--ghost {
+  background: transparent;
+  color: var(--color-muted);
+}
+.landing a.landing-btn--ghost:hover { border-color: var(--color-mist); color: var(--color-text); }
+
+/* Captions sit in grey, not in an accent. Colour is rationed to the places it
+   carries meaning, and a section label is not one of them. */
+.landing-kicker {
+  display: block;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: var(--space-2);
+}
+
+/* ---- the live market panel: the actual product, front and centre ----
+   A card that floats on a black halo rather than on a lighter fill. The
+   shadow is the depth; the surface is only one tonal step off the canvas. */
+.landing .landing-market {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.landing-market__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.landing-market h2 { margin: 0; }
+
+.landing .landing-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.landing-status__time { color: var(--color-muted); }
+
+.status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.status-dot--live { background: var(--color-positive); }
+.status-dot--connecting, .status-dot--reconnecting {
+  background: var(--color-warning);
+  animation: statusPulse 1.4s ease-in-out infinite;
+}
+.status-dot--disconnected { background: var(--color-negative); }
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--connecting, .status-dot--reconnecting { animation: none; }
+}
+
+.landing-market__body {
+  display: flex;
+  margin-top: var(--space-4);
+  min-height: 56px;
+}
+.landing-market__figures { display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* The one place in the system that goes to weight 700: a price is a terminal
+   readout, and the tight tracking on a large figure is what makes it read as
+   one. Tabular figures keep it from jittering as it ticks. */
+.live-price {
+  font-size: clamp(2rem, 5vw, 2.75rem);
   font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--color-text);
+  letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--motion-quick) var(--ease-out);
 }
-.landing .nav-cta {
-  font-family: "Manrope", sans-serif;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--bg);
-  background: var(--gold);
-  border: none;
-  padding: 10px 20px;
-  border-radius: 3px;
-  cursor: pointer;
-  letter-spacing: 0.01em;
-  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), background 0.25s;
-}
-.landing .nav-cta:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.landing .nav-cta:active { transform: translateY(0) scale(0.98); }
+.landing-delta { font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.landing-market__waiting { color: var(--color-muted); }
 
-/* ---------- Hero ---------- */
-.landing .hero { position: relative; height: 280vh; background: var(--bg); }
-.landing .hero-stage {
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-  width: 100%;
-  overflow: hidden;
-  background: var(--bg);
+.landing-market .disclaimer { margin-top: var(--space-3); font-size: 0.75rem; }
+
+/* ---- capabilities: typography and hairline dividers, not a card wall ---- */
+.landing-capabilities {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3);
 }
-.landing .hero-fallback {
+.landing-capabilities h2 { margin: 0 0 var(--space-4); }
+.landing-capabilities__list { display: flex; flex-direction: column; margin: 0; }
+.landing-capabilities__item {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.landing-capabilities__item:last-child { border-bottom: 1px solid var(--color-border); }
+.landing-capabilities__item dt {
+  color: var(--color-text);
+  font-weight: 500;
+  letter-spacing: var(--tracking-heading);
+  margin: 0 0 var(--space-1);
+}
+.landing-capabilities__item dd { margin: 0; color: var(--color-muted); max-width: var(--measure); }
+
+/* A pill tag, outlined in green. This is the one badge on the page, and the
+   outline is the only chromatic punctuation in this section. */
+.landing-sample-tag {
+  display: inline-block;
+  margin-top: var(--space-4);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  border: 1px solid var(--color-positive);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+}
+
+.landing-cta {
+  text-align: center;
+  padding: var(--space-5) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.landing-cta h2 { margin: 0 0 var(--space-4); }
+
+.landing-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 640px) {
+  .landing-market { border-radius: var(--radius); margin-inline: var(--space-3); }
+  .landing-market__head { flex-direction: column; }
+  .landing-market__content { flex-direction: column; align-items: flex-start; }
+}
+
+/* ==========================================================================
+   Motion.
+   --------------------------------------------------------------------------
+   Restrained on purpose: no scroll-hijacking, no parallax, nothing that
+   moves on its own once settled. Every section reveals itself exactly once,
+   the tab indicator slides instead of jumping, and the chart draws itself
+   in — the same choreography a well-made native app would use, not a
+   marketing-site spectacle. Everything here collapses to an instant, static
+   state under prefers-reduced-motion (see the JS side in useInView and the
+   media query at the bottom of this block).
+   ========================================================================== */
+
+.landing-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--motion-slow) var(--ease-out-soft), transform var(--motion-slow) var(--ease-out-soft);
+}
+.landing-reveal.is-in { opacity: 1; transform: none; }
+
+/* A sliding highlight behind the active tab, rather than an instant colour
+   swap — the same device a well-made native segmented control uses. Pill
+   shaped inside and out, because every control in this system is. */
+.landing-market__tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 3px;
+  width: fit-content;
+}
+.landing-tab-indicator {
   position: absolute;
-  inset: 0;
+  top: 3px;
+  left: 3px;
+  height: calc(100% - 6px);
+  width: calc((100% - 6px) / 3);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  transition: transform var(--motion-moderate) var(--ease-out-soft);
   z-index: 0;
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 52%, rgba(47,156,112,0.32) 0%, rgba(47,156,112,0) 60%),
-    radial-gradient(circle at 50% 50%, #17251d 0%, #0a0b09 72%);
 }
-.landing .hero-canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; display: block; }
-.landing .hero-vignette {
-  position: absolute; inset: 0;
+.landing-tab {
+  position: relative;
   z-index: 1;
-  background:
-    linear-gradient(to top, rgba(10,11,9,0.75) 0%, rgba(10,11,9,0) 32%),
-    radial-gradient(ellipse at center, transparent 45%, rgba(10,11,9,0.5) 100%);
-  pointer-events: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--color-muted);
+  padding: var(--space-1) var(--space-4);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color var(--motion-quick) var(--ease-out);
 }
-.landing .hero-grain {
-  position: absolute; inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.landing .hero-eyebrow {
-  position: absolute; top: 14%; left: 50%; transform: translate(-50%, 0);
-  text-align: center; z-index: 2;
-}
-.landing .hero-eyebrow .mono {
-  font-size: 12px; letter-spacing: 0.22em; color: var(--text-dim); text-transform: uppercase;
-}
-.landing .hero-statement {
-  position: absolute; inset: 0;
-  display: flex; align-items: flex-end; justify-content: center;
-  text-align: center; padding: 0 24px 12vh; opacity: 0; z-index: 2;
-}
-.landing .hero-statement h1 { font-size: clamp(2rem, 6vw, 4.4rem); line-height: 1.05; max-width: 18ch; }
-.landing .hero-statement h1 em { font-style: normal; color: var(--gold-bright); }
-.landing .hero-progress {
-  position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-  width: 160px; height: 2px; background: var(--line-strong); border-radius: 2px; overflow: hidden; z-index: 2;
-}
-.landing .hero-progress-fill { height: 100%; width: 0%; background: var(--emerald-bright); }
+.landing-tab.is-active { color: var(--color-text); }
+.landing-tab:not(.is-active):hover { color: var(--color-mist); }
 
-/* ---------- Manifesto ---------- */
-.landing .manifesto { padding: clamp(96px, 16vw, 200px) 0; border-top: 1px solid var(--line); }
-.landing .manifesto .wrap { max-width: 900px; }
-.landing .manifesto p.lede {
-  font-family: "Unbounded", sans-serif; font-weight: 500;
-  font-size: clamp(1.5rem, 3.4vw, 2.4rem); line-height: 1.3;
-  color: var(--text); letter-spacing: -0.01em;
+/* The price/delta/sparkline block re-mounts (keyed on the active symbol) on
+   every switch, so it always plays this entrance rather than only the
+   first time. */
+@keyframes landingContentIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
-.landing .manifesto p.lede .dim { color: var(--text-faint); }
-.landing .manifesto .sub { margin-top: 28px; max-width: 52ch; color: var(--text-dim); font-size: 1.02rem; }
-
-/* ---------- Section shell ---------- */
-.landing section.block { padding: clamp(72px, 10vw, 128px) 0; border-top: 1px solid var(--line); }
-.landing .kicker {
-  font-family: "Manrope", sans-serif; font-weight: 700; font-size: 12px;
-  letter-spacing: 0.16em; text-transform: uppercase; color: var(--emerald-bright);
-  margin-bottom: 18px; display: block;
-}
-.landing .block h2 { font-size: clamp(1.8rem, 3.2vw, 2.7rem); max-width: 14ch; }
-.landing .block .intro { color: var(--text-dim); max-width: 56ch; margin-top: 18px; font-size: 1.02rem; }
-
-/* ---------- Financial Health ---------- */
-.landing .health-layout { margin-top: 56px; display: grid; grid-template-columns: 1.1fr 1.4fr; gap: 64px; align-items: center; }
-.landing .health-dial { position: relative; width: 260px; height: 260px; margin: 0 auto; }
-.landing .health-dial svg { width: 100%; height: 100%; }
-.landing .health-dial .center-num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.landing .health-dial .center-num .n { font-family: "Unbounded", sans-serif; font-size: 3.2rem; font-weight: 600; color: var(--text); }
-.landing .health-dial .center-num .label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); margin-top: 4px; }
-.landing .health-components { display: flex; flex-direction: column; gap: 0; }
-.landing .health-row { display: grid; grid-template-columns: 1fr auto 90px; align-items: center; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
-.landing .health-row:last-child { border-bottom: none; }
-.landing .health-row .name { font-size: 0.94rem; color: var(--text); }
-.landing .health-row .bar-track { height: 3px; background: var(--surface-2); border-radius: 2px; overflow: hidden; width: 100%; }
-.landing .health-row .bar-fill { height: 100%; background: var(--emerald); border-radius: 2px; }
-.landing .health-row .val { text-align: right; font-size: 0.85rem; color: var(--text-dim); }
-.landing .sample-tag {
-  display: inline-block; margin-top: 40px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-faint); border: 1px solid var(--line-strong); padding: 5px 10px; border-radius: 3px;
+.landing-market__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  animation: landingContentIn var(--motion-moderate) var(--ease-out-soft) both;
 }
 
-/* ---------- Twin / DNA duo ---------- */
-.landing .duo { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
-.landing .duo-card { background: var(--bg); padding: 44px 40px; }
-.landing .duo-card h3 { font-size: 1.3rem; margin-bottom: 14px; }
-.landing .duo-card p { color: var(--text-dim); font-size: 0.95rem; max-width: 42ch; }
-.landing .twin-viz { margin-top: 32px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.landing .twin-viz .cell {
-  aspect-ratio: 1; border: 1px solid var(--line-strong); border-radius: 3px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; color: var(--text-faint); background: var(--surface);
-}
-.landing .twin-viz .cell.on { background: var(--emerald-deep); border-color: var(--emerald); color: var(--emerald-bright); }
-.landing .dna-strand { margin-top: 32px; display: flex; flex-direction: column; gap: 8px; }
-.landing .dna-row { display: flex; align-items: center; gap: 12px; }
-.landing .dna-row .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
-.landing .dna-row .line { height: 1px; background: var(--line-strong); flex: 1; }
-.landing .dna-row .tag { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
-
-/* ---------- Capability strip ---------- */
-.landing .capabilities-grid { margin-top: 56px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
-.landing .cap-cell { background: var(--bg); padding: 32px 26px; display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
-.landing .cap-cell .n { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--text-faint); }
-.landing .cap-cell h4 { font-family: "Unbounded", sans-serif; font-size: 1.02rem; font-weight: 500; margin: 0; }
-.landing .cap-cell p { font-size: 0.86rem; color: var(--text-dim); margin: 0; flex: 1; }
-
-/* ---------- CTA ---------- */
-.landing .cta-block {
-  padding: clamp(100px, 16vw, 200px) 0; text-align: center; border-top: 1px solid var(--line);
-  background: radial-gradient(ellipse at 50% 0%, var(--emerald-deep) 0%, transparent 60%);
-}
-.landing .cta-block h2 { font-size: clamp(2rem, 4.6vw, 3.4rem); max-width: 16ch; margin: 0 auto; }
-.landing .cta-actions { margin-top: 40px; display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
-.landing .btn-primary {
-  font-family: "Manrope", sans-serif; font-weight: 700; font-size: 14px; color: var(--bg);
-  background: var(--gold); border: none; padding: 16px 34px; border-radius: 3px; cursor: pointer;
-  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), background 0.25s;
-}
-.landing .btn-primary:hover { background: var(--gold-bright); transform: translateY(-2px); }
-.landing .btn-primary:active { transform: translateY(0) scale(0.98); }
-.landing .btn-ghost {
-  font-family: "Manrope", sans-serif; font-weight: 600; font-size: 14px; color: var(--text);
-  background: transparent; border: 1px solid var(--line-strong); padding: 16px 30px; border-radius: 3px; cursor: pointer;
-  transition: border-color 0.25s, transform 0.25s;
-}
-.landing .btn-ghost:hover { border-color: var(--text-dim); transform: translateY(-2px); }
-
-.landing footer {
-  padding: 36px 0 48px; border-top: 1px solid var(--line);
-  display: flex; justify-content: space-between; color: var(--text-faint); font-size: 12px; flex-wrap: wrap; gap: 12px;
-}
-
-@media (max-width: 860px) {
-  .landing .health-layout { grid-template-columns: 1fr; gap: 40px; }
-  .landing .duo { grid-template-columns: 1fr; }
-  .landing .capabilities-grid { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 480px) {
-  .landing .capabilities-grid { grid-template-columns: 1fr; }
-  .landing .nav-mark { font-size: 13px; }
-}
-
-/* ================= premium polish layer ================= */
-
-.landing .page-grain {
-  position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0.035; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.landing .scroll-progress {
-  position: fixed; top: 0; left: 0; height: 2px; width: 0%;
-  background: linear-gradient(90deg, var(--emerald-bright), var(--gold)); z-index: 70; pointer-events: none;
-}
-
-.landing .loader {
-  position: fixed; inset: 0; z-index: 100; background: var(--bg);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-}
-.landing .loader-mark { font-family: "Unbounded", sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.18em; color: var(--text-dim); opacity: 0; }
-.landing .loader-bar { width: 140px; height: 1px; background: var(--line-strong); overflow: hidden; }
-.landing .loader-bar-fill { height: 100%; width: 0%; background: var(--gold); }
-.landing .loader.is-done { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
-
-.landing.has-cursor, .landing.has-cursor a, .landing.has-cursor button { cursor: none; }
-.landing .cursor-dot, .landing .cursor-ring {
-  position: fixed; top: 0; left: 0; pointer-events: none; z-index: 90; border-radius: 50%;
-  transform: translate(-50%, -50%); will-change: transform;
-}
-.landing .cursor-dot { width: 5px; height: 5px; background: var(--gold-bright); opacity: 0; }
-.landing .cursor-ring {
-  width: 30px; height: 30px; border: 1px solid var(--line-strong); opacity: 0;
-  transition: width 0.25s cubic-bezier(0.16,1,0.3,1), height 0.25s cubic-bezier(0.16,1,0.3,1), border-color 0.25s;
-}
-.landing.has-cursor .cursor-dot, .landing.has-cursor .cursor-ring { opacity: 1; }
-.landing .cursor-ring.is-active { width: 52px; height: 52px; border-color: var(--gold); }
-
-.landing .ambient-blob { position: absolute; border-radius: 50%; filter: blur(60px); pointer-events: none; opacity: 0.5; z-index: 0; }
-@keyframes landingDriftA { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(4%, -6%) scale(1.08); } }
-@keyframes landingDriftB { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-5%, 5%) scale(1.05); } }
-.landing .ambient-blob.a { animation: landingDriftA 26s ease-in-out infinite; }
-.landing .ambient-blob.b { animation: landingDriftB 32s ease-in-out infinite; }
-
-.landing .reveal-fade { opacity: 0; transform: translateY(28px); }
-.landing .reveal-blur { opacity: 0; filter: blur(14px); }
-.landing .reveal-scale { opacity: 0; transform: scale(0.96); }
-.landing .reveal-clip { clip-path: inset(0 0 100% 0); }
-.landing .reveal-word { display: inline-block; opacity: 0; filter: blur(6px); transform: translateY(0.35em); }
-.landing [data-stagger] > * { opacity: 0; transform: translateY(20px); }
-
-.landing [data-tilt] {
-  position: relative; transform-style: preserve-3d;
-  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1); will-change: transform;
-}
-.landing [data-tilt]::before {
-  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
-  transition: opacity 0.35s ease;
-  background: radial-gradient(circle 160px at var(--mx, 50%) var(--my, 50%), rgba(201,164,99,0.14), transparent 70%);
-}
-.landing [data-tilt]:hover::before { opacity: 1; }
-.landing [data-tilt] > * { position: relative; z-index: 1; }
-
-@media (max-width: 860px), (hover: none), (pointer: coarse) {
-  .landing .ambient-blob { animation: none; }
-  .landing [data-tilt] { transition: none; }
-  .landing [data-tilt]::before { display: none; }
+/* The sparkline draws itself in once, via stroke-dashoffset — set inline
+   per-element (its length varies with the data), this only supplies the
+   transition. */
+.sparkline-path {
+  transition: stroke-dashoffset var(--motion-count) var(--ease-out-soft), stroke var(--motion-quick) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing .hero { height: 100dvh; }
-  .landing .hero-eyebrow { display: none; }
-  .landing .hero-progress { display: none; }
-  .landing .ambient-blob { animation: none; }
-  .landing .reveal-fade, .landing .reveal-blur, .landing .reveal-scale, .landing .reveal-word { opacity: 1; transform: none; filter: none; }
-  .landing .reveal-clip { clip-path: none; }
-  .landing [data-stagger] > * { opacity: 1; transform: none; }
-  .landing [data-tilt] { transition: none; transform: none !important; }
-  .landing .loader { display: none; }
-  .landing .cursor-dot, .landing .cursor-ring { display: none; }
+  .landing-reveal { opacity: 1; transform: none; transition: none; }
+  .landing-tab-indicator { transition: none; }
+  .landing-market__content { animation: none; }
+  .sparkline-path { transition: none; }
 }

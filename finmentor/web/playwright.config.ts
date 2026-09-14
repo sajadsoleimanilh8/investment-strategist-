@@ -52,6 +52,9 @@ export default defineConfig({
       env: {
         DEMO_MODE: "true",
         ENABLE_SCHEDULER: "false",
+        // Same reasoning as DEMO_MODE: no external API on a path this suite
+        // depends on being deterministic (app/market/live.py's poll loop).
+        ENABLE_MARKET_LIVE: "false",
         // The model is deliberately unreachable, not faked. The fake provider
         // would let the Ask flow pass while proving nothing about what a user
         // sees when Ollama is down — which is the Phase 5 guarantee this suite

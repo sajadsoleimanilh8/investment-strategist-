@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { getSummary } from "../api/health";
 import { AsyncBoundary } from "../components/AsyncBoundary";
 import { compact, money, percent } from "../components/Money";
+import { useCountUp } from "../hooks/useCountUp";
 
 const COMPONENT_LABELS: Record<string, string> = {
   savings_rate: "Savings rate",
@@ -13,6 +14,22 @@ const COMPONENT_LABELS: Record<string, string> = {
   budget_stability: "Budget stability",
   goal_progress: "Goal progress",
 };
+
+/**
+ * The one figure on this screen that counts up to itself.
+ *
+ * Exactly one, for two reasons. The motion guidance caps a view at one or two
+ * animated elements before the screen starts competing with itself — and more
+ * importantly, this app's rule is that a number on screen is a number the
+ * engine sent. A count-up shows intermediate values that nobody computed, so
+ * it is spent on the single derived headline score and never on a money
+ * figure: income, debt and savings are the reader's own balances, and those
+ * are printed, not performed. The score always lands exactly on `total`.
+ */
+function HealthScore({ total }: { total: number }) {
+  const shown = useCountUp(total);
+  return <>Financial health: {shown.toFixed(1)} / 100</>;
+}
 
 export function Dashboard() {
   const { data, isLoading, error } = useQuery({
@@ -36,7 +53,7 @@ export function Dashboard() {
       {data?.onboarded && data.health && data.twin && data.dna && (
         <>
           <section>
-            <h2>Financial health: {data.health.total.toFixed(1)} / 100</h2>
+            <h2><HealthScore total={data.health.total} /></h2>
             <div className="table-scroll">
               <table>
                 <caption className="disclaimer">

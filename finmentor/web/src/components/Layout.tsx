@@ -1,5 +1,5 @@
 /** Navigation and an outlet. Structure only — no visual decisions here. */
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
 
@@ -16,6 +16,7 @@ const LINKS = [
 export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   async function signOut() {
     await logout();
@@ -42,7 +43,12 @@ export function Layout() {
         )}
       </header>
 
-      <main>
+      {/* Keyed on the path so the entrance replays on every navigation rather
+          than only the first mount. Every page is already a list of top-level
+          `section`s, so staggering main's children *is* the route transition —
+          the page resolves card by card instead of the whole screen blinking
+          over at once, and a one-section page still gets a clean fade. */}
+      <main key={pathname} className="stagger">
         <Outlet />
       </main>
 
