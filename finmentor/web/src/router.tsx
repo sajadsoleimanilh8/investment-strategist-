@@ -7,7 +7,14 @@
  * in has no navigation to show. Onboarding sits inside `RequireAuth` but with
  * `needsProfile` off — it is the page that *creates* the profile, so requiring
  * one would be a redirect loop.
+ *
+ * Landing is lazy: it alone pulls in three.js, gsap and lenis for its
+ * cinematic hero (several hundred KB), and nobody using the actual app
+ * (dashboard, goals, simulate, ...) should have to download that. Every
+ * other page stays a static import — none of them carry that weight, and a
+ * signed-in user's very first navigation is straight through this router.
  */
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import { Layout } from "./components/Layout";
@@ -15,7 +22,6 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { Ask } from "./pages/Ask";
 import { Dashboard } from "./pages/Dashboard";
 import { Goals } from "./pages/Goals";
-import { Landing } from "./pages/Landing";
 import { Learn } from "./pages/Learn";
 import { Login } from "./pages/Login";
 import { Market } from "./pages/Market";
@@ -26,10 +32,21 @@ import { RootGate } from "./pages/RootGate";
 import { Signup } from "./pages/Signup";
 import { Simulate } from "./pages/Simulate";
 
+const Landing = lazy(() => import("./pages/Landing").then((m) => ({ default: m.Landing })));
+
 const guarded = (element: JSX.Element) => <RequireAuth>{element}</RequireAuth>;
 
 export const router = createBrowserRouter([
-  { path: "/", element: <RootGate><Landing /></RootGate> },
+  {
+    path: "/",
+    element: (
+      <RootGate>
+        <Suspense fallback={null}>
+          <Landing />
+        </Suspense>
+      </RootGate>
+    ),
+  },
   { path: "/signup", element: <Signup /> },
   { path: "/login", element: <Login /> },
   {
