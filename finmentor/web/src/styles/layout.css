@@ -20,7 +20,12 @@
    looks like a betting screen tells someone learning where their salary goes
    the wrong thing about what they are doing.
 
-   Contrast is checked, not eyeballed. Every foreground below meets WCAG AA
+   This block is not quite every token: duration and easing live in
+  `motion.css`, next to the rationale for the four devices that use them. Two
+  vocabularies, two files, on the grounds that splitting a page of reasoning
+  about motion away from the numbers it explains helps nobody.
+
+  Contrast is checked, not eyeballed. Every foreground below meets WCAG AA
    against the surface it sits on at the size it is used — the deltas matter
    most, because red-on-near-black is exactly the combination that fails, and a
    number someone cannot read is a number that might as well be wrong.

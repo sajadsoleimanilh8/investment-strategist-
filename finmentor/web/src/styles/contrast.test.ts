@@ -19,8 +19,22 @@ import { describe, expect, it } from "vitest";
 // Read from disk, not `import css from "./layout.css?raw"` — Vite hands a test
 // its *processed* stylesheet, and the token declarations this parses do not
 // survive that intact.
-const css = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "layout.css"), "utf8");
+const here = dirname(fileURLToPath(import.meta.url));
+const read = (path: string) => readFileSync(join(here, path), "utf8");
+
+const css = read("layout.css");
+
+/** Every file that can put a colour or a font on the screen. The token block
+ * lives in layout.css, but the rules that *use* it do not, and the web-font
+ * ban below is only worth anything if it covers the places a font has
+ * actually been added before: landing.css and index.html both carried Google
+ * Fonts links at one point. */
+const ALL_STYLESHEETS: Record<string, string> = {
+  "layout.css": css,
+  "landing.css": read("landing.css"),
+  "motion.css": read("motion.css"),
+  "index.html": read("../../index.html"),
+};
 
 /** WCAG 2.1: 4.5:1 for body text. Nothing here relies on the 3:1 large-text
  * allowance — the ramp clears the body floor everywhere, at every size. */
@@ -72,7 +86,12 @@ describe("the ratio function itself", () => {
 });
 
 /** The three-step type ramp: white headlines, mist body, graphite captions. */
-const FOREGROUNDS = ["color-text", "color-mist", "color-muted", "color-accent"] as const;
+const FOREGROUNDS = [
+  "color-text", "color-mist", "color-muted", "color-accent",
+  // The accented word in a headline. It is type, so it is held to the type
+  // floor — "it is only one word" is not an exemption anyone reading it feels.
+  "color-brand",
+] as const;
 
 describe("text on the page background", () => {
   it.each(FOREGROUNDS)("--%s clears AA for body text", (name) => {
@@ -167,9 +186,28 @@ describe("the palette is actually dark", () => {
 });
 
 describe("no web fonts", () => {
-  it("every font token is a system stack", () => {
+  it.each(Object.keys(ALL_STYLESHEETS))("%s fetches no font", (name) => {
     // DEMO_MODE has to run with no network at all, and a web font is a fetch.
-    expect(css).not.toMatch(/@import\s+url|@font-face|fonts\.googleapis|fonts\.gstatic/);
+    // Checked across every file rather than only the token block, because the
+    // links that had to be removed from this project lived in index.html and
+    // landing.css, not in layout.css.
+    expect(ALL_STYLESHEETS[name]).not.toMatch(
+      /@import\s+url|@font-face|fonts\.googleapis|fonts\.gstatic/);
+  });
+
+  it("the body font is a system stack", () => {
     expect(css).toMatch(/--font-body:\s*system-ui/);
+  });
+});
+
+describe("the decorative tokens stay decorative", () => {
+  it("--color-brand-deep is never used as a foreground", () => {
+    // It is the terminus of a warm wash, chosen to sit *under* something. It
+    // has no contrast guarantee, so the guarantee is that nothing reads on it:
+    // the moment it appears as a `color:`, this fails and it needs a ratio.
+    for (const [name, sheet] of Object.entries(ALL_STYLESHEETS)) {
+      expect(sheet, `${name} puts text on --color-brand-deep`)
+        .not.toMatch(/color:\s*var\(--color-brand-deep\)/);
+    }
   });
 });
