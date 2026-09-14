@@ -3,9 +3,9 @@
 #
 #   scripts/check_pinned.sh
 #
-# The local environment and requirements.txt have drifted apart — twelve
-# packages differ, `fastapi` by twenty-four minor versions. Everything `pytest`
-# says is therefore a statement about versions no user will ever run.
+# The local environment and requirements.txt agree today. They have not always:
+# twelve packages once differed, `fastapi` by twenty-four minor versions, and
+# everything `pytest` said was a statement about versions no user would run.
 #
 # That is not hypothetical. Twice now a name that exists in the newer library
 # and not the pinned one has shipped and broken a user-facing path:
@@ -22,18 +22,23 @@
 # Tests are not baked into the image (.dockerignore keeps them out, correctly),
 # so they are mounted, along with the few repo files some tests read.
 #
-# Exits 0 and says why if Docker is unavailable: a machine without it should
-# not go red for a check it cannot perform.
+# Exits 2 and says why if Docker is unavailable. A machine without Docker should
+# not go red for a check it cannot perform — but it must not report a pass
+# either, because the check did not run.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
 REPO="$(pwd -W 2>/dev/null || pwd)"
 
+# Exit 2, not 0. A skip here is not a pass: it means the one check that looks at
+# the versions users actually get did not run, and saying "passed" would be a
+# lie of omission. The caller decides what to do with that — `ci_demo.sh`
+# reports the gate as incomplete and fails it under --strict.
 if ! docker info >/dev/null 2>&1; then
-  echo "  SKIPPED: Docker is not available, so the pinned versions cannot be"
-  echo "  exercised. `pytest` alone tests whatever this machine happens to have"
-  echo "  installed, which is not what ships."
-  exit 0
+  echo "  SKIPPED: Docker is not available, so the pinned versions were NOT"
+  echo "  exercised. Local pytest tests whatever this machine has installed,"
+  echo "  which is not necessarily what ships. This check did not run."
+  exit 2
 fi
 
 echo "building the API image…"

@@ -12,9 +12,10 @@
 #   3. the same flow through a browser (Playwright), against an API whose model
 #      host is equally closed
 #   4. the suite again, inside the API image, against the versions in
-#      requirements.txt — the local environment has drifted from the pins, and
-#      twice a name present in the newer library and absent from the pinned one
-#      has shipped and broken a user-facing path
+#      requirements.txt. The local environment matches those pins today, but it
+#      has drifted twice before, and each time a name present in the newer
+#      library and absent from the pinned one shipped and broke a user-facing
+#      path. This is what notices when they part company again.
 #
 # The model being *unreachable* rather than faked is the point of steps 2 and 3.
 # A fake provider would let both pass while proving nothing about the promise
@@ -31,6 +32,7 @@ STRICT=""
 [[ "${1:-}" == "--strict" ]] && STRICT="--strict"
 
 failed=0
+skipped=0
 step() {
   printf '\n\033[1m==> %s\033[0m\n' "$1"
 }
@@ -60,18 +62,26 @@ else
 fi
 
 step "4/4  the suite against the versions that actually ship"
-if bash scripts/check_pinned.sh; then
-  echo "    passed"
-else
-  echo "    FAILED"
-  failed=1
-fi
+bash scripts/check_pinned.sh
+case $? in
+  0) echo "    passed" ;;
+  # 2 means Docker was unavailable, so the check did not run. That is not a
+  # pass and must not be reported as one — the gate stays green on a machine
+  # without Docker, but says out loud that it is incomplete.
+  2) echo "    DID NOT RUN"
+     skipped=1
+     [[ -n "$STRICT" ]] && { echo "    --strict: an unrun check is a failure"; failed=1; } ;;
+  *) echo "    FAILED"; failed=1 ;;
+esac
 
 printf '\n%s\n' "======================================================================"
-if [[ $failed -eq 0 ]]; then
+if [[ $failed -ne 0 ]]; then
+  echo "DEMO_MODE gate FAILED — see above."
+elif [[ $skipped -ne 0 ]]; then
+  echo "DEMO_MODE gate passed, but INCOMPLETE: one or more checks did not run."
+  echo "Re-run with Docker available, or use --strict to make that a failure."
+else
   echo "DEMO_MODE gate passed: both surfaces work with no Ollama, no market API,"
   echo "and no remote LLM."
-else
-  echo "DEMO_MODE gate FAILED — see above."
 fi
 exit $failed
