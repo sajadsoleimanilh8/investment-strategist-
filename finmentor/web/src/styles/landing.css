@@ -95,7 +95,7 @@
 .landing .nav-cta:active { transform: translateY(0) scale(0.98); }
 
 /* ---------- Hero ---------- */
-.landing .hero { position: relative; height: 420vh; background: var(--bg); }
+.landing .hero { position: relative; height: 280vh; background: var(--bg); }
 .landing .hero-stage {
   position: sticky;
   top: 0;

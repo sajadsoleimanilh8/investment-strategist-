@@ -1,5 +1,10 @@
 # --- web / api ---
-fastapi==0.115.5
+fastapi==0.141.1
+# Pinned explicitly though it is FastAPI's own dependency: this is the
+# package whose renamed 422 constant turned every validation error into a
+# 500 in the container. An unpinned transitive can change its API between
+# two builds of the same commit.
+starlette==1.6.0
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
 pydantic-settings==2.6.1
@@ -26,11 +31,11 @@ argon2-cffi==25.1.0
 python-telegram-bot==21.6
 
 # --- misc ---
-requests==2.32.3
-python-dotenv==1.0.1
+requests==2.34.2
+python-dotenv==1.2.3
 httpx==0.28.1
 
 # --- dev / test ---
-pytest==8.3.3
-pytest-asyncio==0.24.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
 pytest-cov==7.1.0

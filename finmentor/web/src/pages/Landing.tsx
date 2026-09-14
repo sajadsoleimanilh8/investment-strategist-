@@ -376,7 +376,7 @@ export function Landing() {
       cleanups.push(() => document.removeEventListener("visibilitychange", onVisibility));
 
       applyProgress = (p: number) => {
-        const openT = easeInOutCubic(Math.min(p / 0.85, 1));
+        const openT = easeInOutCubic(Math.min(p / 0.96, 1));
 
         gem.scale.setScalar(lerp(0.001, 1.05, openT));
         glow.scale.setScalar(lerp(0.001, 2.6, openT));
@@ -386,17 +386,28 @@ export function Landing() {
           mesh.position.z = lerp(0, (i - 1) * 1.4, openT);
         });
 
+        // Each coin gets its own staggered window instead of moving in lockstep
+        // with the rest, and arcs up and settles instead of sliding in a
+        // straight line: that's what makes six identical discs separating
+        // read as six *things* being pulled apart, not one rigid shape.
         coins.forEach((coin, i) => {
           const from = stacked[i], to = opened[i];
-          coin.position.lerpVectors(from.pos, to.pos, openT);
-          coin.rotation.y = lerp(from.rotY, to.rotY, openT);
-          coin.rotation.x = lerp(from.rotXZ, to.rotXZ, openT) * 0.6;
-          coin.rotation.z = lerp(from.rotXZ, to.rotXZ, openT) * 0.4;
-          coin.scale.setScalar(lerp(from.scale, to.scale, openT));
+          const staggerStart = i * 0.06;
+          const localT = easeInOutCubic(
+            Math.max(0, Math.min((openT - staggerStart) / (1 - staggerStart), 1)),
+          );
+          const arc = Math.sin(localT * Math.PI) * (0.35 + i * 0.05);
+
+          coin.position.lerpVectors(from.pos, to.pos, localT);
+          coin.position.y += arc;
+          coin.rotation.y = lerp(from.rotY, to.rotY, localT);
+          coin.rotation.x = lerp(from.rotXZ, to.rotXZ, localT) * 0.6;
+          coin.rotation.z = lerp(from.rotXZ, to.rotXZ, localT) * 0.4;
+          coin.scale.setScalar(lerp(from.scale, to.scale, localT));
         });
 
         camera!.position.z = lerp(9.6, 8, openT);
-        camera!.position.x = Math.sin(p * Math.PI) * 0.7;
+        camera!.position.x = lerp(0, 0.55, openT);
         camera!.lookAt(0, 0, 0);
       };
 
@@ -478,7 +489,7 @@ export function Landing() {
         const p = self.progress;
         if (sceneReady) applyProgress!(p);
         eyebrow.style.opacity = String(Math.max(0, 1 - p / 0.22));
-        const textP = Math.max(0, Math.min((p - 0.62) / 0.3, 1));
+        const textP = Math.max(0, Math.min((p - 0.7) / 0.25, 1));
         statement.style.opacity = String(textP);
         progressFill.style.width = `${(p * 100).toFixed(1)}%`;
       },
@@ -498,9 +509,23 @@ export function Landing() {
 
     ScrollTrigger.refresh();
 
+    // Unbounded/Manrope/JetBrains Mono load async; every trigger position
+    // computed before they land is measured against fallback-font metrics
+    // and drifts once the real faces swap in. Recomputing after they're
+    // ready is what keeps sections below the hero from firing their reveal
+    // at the wrong scroll offset (and so staying invisible).
+    let fontsRefreshed = false;
+    document.fonts?.ready.then(() => {
+      if (!disposed) { fontsRefreshed = true; ScrollTrigger.refresh(); }
+    });
+    const lateRefreshId = window.setTimeout(() => {
+      if (!disposed && !fontsRefreshed) ScrollTrigger.refresh();
+    }, 1500);
+
     return () => {
       disposed = true;
       running = false;
+      clearTimeout(lateRefreshId);
       cancelAnimationFrame(rafId);
       heroTrigger.kill();
       navTrigger.kill();
@@ -679,7 +704,7 @@ export function Landing() {
           if (tw.scrollTrigger) triggers.push(tw.scrollTrigger);
         });
         root.querySelectorAll(".reveal-scale").forEach((el) => {
-          const tw = gsap.to(el, { opacity: 1, scale: 1, duration: 0.7, ease: "back.out(1.4)", scrollTrigger: { trigger: el, start: "top 85%" } });
+          const tw = gsap.to(el, { opacity: 1, scale: 1, duration: 0.8, ease: "power3.out", scrollTrigger: { trigger: el, start: "top 85%" } });
           if (tw.scrollTrigger) triggers.push(tw.scrollTrigger);
         });
         root.querySelectorAll(".reveal-clip").forEach((el) => {
