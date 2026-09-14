@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+from app.api.deps import require_user
+from app.api.routes import ALL_ROUTERS
 from app.core import security
 from app.core.config import settings
 from app.schemas.auth import MIN_PASSWORD_LENGTH
@@ -268,7 +270,57 @@ def test_no_route_answers_without_a_token(raw_client, method, path):
 
 OPEN = [("POST", "/api/auth/signup"), ("POST", "/api/auth/login"),
         ("POST", "/api/auth/refresh"), ("POST", "/api/auth/logout"),
-        ("GET", "/healthz")]
+        ("GET", "/healthz"), ("GET", "/api/market/public/BTC")]
+
+
+#: Every path that answers without a token, as a path template. The list above
+#: proves these *stay* open; this one is the inventory the next test checks the
+#: application against, so adding a public route means adding a line here
+#: rather than discovering later that one slipped through.
+PUBLIC_PATHS = {
+    "/api/auth/signup",
+    "/api/auth/login",
+    "/api/auth/refresh",
+    "/api/auth/logout",
+    # The live-price WebSocket and the series that seeds its sparkline. A
+    # current price is not personal data; both are capped, origin-checked or
+    # cache-only, and neither can reach another user's rows.
+    "/api/market/live",
+    "/api/market/public/{symbol}",
+}
+
+
+def _is_guarded(router, route) -> bool:
+    """Whether `require_user` runs for this route, from either direction.
+
+    Most routers carry it once, at the router, which is what makes a route
+    added later guarded by default. `/api/auth/me` is the exception: it sits
+    on the open auth router and declares the dependency itself.
+    """
+    if any(getattr(d, "dependency", None) is require_user for d in router.dependencies):
+        return True
+    dependant = getattr(route, "dependant", None)
+    return dependant is not None and any(
+        d.call is require_user for d in dependant.dependencies
+    )
+
+
+def test_every_route_is_guarded_or_listed_as_public():
+    """The guard, checked against the application rather than against a list.
+
+    `GUARDED` above is hand-maintained, so a new unguarded route would simply
+    not appear in it and nothing would fail. This walks the real router tree
+    instead: a route that is neither guarded nor named in `PUBLIC_PATHS` is a
+    failure at the moment it is written.
+    """
+    unguarded = [
+        route.path
+        for router in ALL_ROUTERS
+        for route in router.routes
+        if not _is_guarded(router, route) and route.path not in PUBLIC_PATHS
+    ]
+
+    assert unguarded == [], f"unguarded routes not declared public: {unguarded}"
 
 
 @pytest.mark.parametrize("method,path", OPEN, ids=lambda v: str(v))

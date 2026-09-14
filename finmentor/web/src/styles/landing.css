@@ -233,12 +233,27 @@
   animation: statusPulse 1.4s ease-in-out infinite;
 }
 .status-dot--disconnected { background: var(--color-negative); }
+/* No feed configured is not a fault, so it is not red. Grey says "this is
+   switched off", which is the truth. */
+.status-dot--off { background: var(--color-muted); }
+/* Demo data is not a healthy green either. Amber is the caution token, and
+   this is exactly the thing a reader must not mistake for a real price. */
+.status-dot--demo { background: var(--color-warning); }
 @keyframes statusPulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
 @media (prefers-reduced-motion: reduce) {
   .status-dot--connecting, .status-dot--reconnecting { animation: none; }
+}
+
+/* The no-feed state. It takes the space the price and chart would have
+   occupied rather than collapsing the card, so the section still reads as a
+   deliberate part of the page instead of a piece that failed to load. */
+.landing-market__off {
+  margin: var(--space-4) 0 0;
+  color: var(--color-muted);
+  max-width: 52ch;
 }
 
 .landing-market__body {

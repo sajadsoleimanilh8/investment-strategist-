@@ -2,13 +2,34 @@
  * The public live-price WebSocket (app/api/routes/market_live.py).
  *
  * Connection states are real, not decorative: "live" only appears once the
- * server has actually said so, and a dropped socket reconnects with backoff
- * instead of silently going stale. `status` is what the UI is required to
- * show truthfully — never claim "live" data that is not.
+ * server has actually said so, a dropped socket reconnects with backoff
+ * instead of silently going stale, and "off" is a state the server declares
+ * rather than one the client infers from silence. `status` and `source` are
+ * what the UI is required to show truthfully — never claim "live" data that
+ * is not, and never render a synthetic price without saying so.
+ *
+ * The chart's history comes from two places, kept apart on purpose. Live
+ * ticks accumulate here as they arrive. The shape *before* the first tick is
+ * seeded once from the cached daily series, so a first-time visitor sees a
+ * real line instead of watching an empty chart for twenty seconds. Nothing
+ * interpolates between the two: the seed is closes, the tail is ticks, and a
+ * gap between them stays a gap.
  */
 import { useEffect, useRef, useState } from "react";
 
-export type ConnectionStatus = "connecting" | "live" | "reconnecting" | "disconnected";
+import { API_BASE_URL } from "../api/client";
+import { getPublicSeries } from "../api/market";
+
+export type ConnectionStatus =
+  | "connecting"
+  | "live"
+  | "reconnecting"
+  | "disconnected"
+  /** The server has no feed configured (DEMO_MODE, or MARKET_LIVE_SOURCE=off). */
+  | "off";
+
+/** Where the prices come from. `mock` must be labelled wherever it renders. */
+export type FeedSource = "live" | "mock" | "off";
 
 export interface Tick {
   symbol: string;
@@ -22,12 +43,14 @@ const RECONNECT_BASE_MS = 1500;
 const RECONNECT_MAX_MS = 20_000;
 
 function wsUrl(): string {
-  const base: string = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-  return `${base.replace(/^http/, "ws")}/api/market/live`;
+  // Same base as every other request (see API_BASE_URL) — http becomes ws,
+  // https becomes wss, and a one-origin deploy needs no configuration.
+  return `${API_BASE_URL.replace(/^http/, "ws")}/api/market/live`;
 }
 
-export function useLiveMarket() {
+export function useLiveMarket(symbols: readonly string[] = []) {
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [source, setSource] = useState<FeedSource>("live");
   const [ticks, setTicks] = useState<Record<string, Tick>>({});
   const [history, setHistory] = useState<Record<string, Tick[]>>({});
 
@@ -67,9 +90,11 @@ export function useLiveMarket() {
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data as string);
-          if (payload.status === "live" || payload.status === "reconnecting") {
+          if (payload.status === "live" || payload.status === "reconnecting"
+              || payload.status === "off") {
             setStatus(payload.status);
           }
+          if (payload.source) setSource(payload.source);
           if (payload.ticks) applyTicks(payload.ticks);
         } catch {
           // A malformed frame is dropped, not fatal — the next one just works.
@@ -99,5 +124,49 @@ export function useLiveMarket() {
     };
   }, []);
 
-  return { status, ticks, history };
+  // The seed. Once, and only for a feed that is actually running: with no
+  // feed the panel renders no chart, so fetching a series for it would be a
+  // request nobody reads. A failure here is silent by design — the chart is
+  // an enhancement, and the price above it is the thing that matters.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || status === "off" || symbols.length === 0) return;
+    seededRef.current = true;
+
+    let cancelled = false;
+    Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          const series = await getPublicSeries(symbol);
+          return [symbol, series.points] as const;
+        } catch {
+          return [symbol, []] as const;
+        }
+      }),
+    ).then((seeds) => {
+      if (cancelled) return;
+      setHistory((prev) => {
+        const next = { ...prev };
+        for (const [symbol, points] of seeds) {
+          if (points.length === 0) continue;
+          const asTicks: Tick[] = points.map((point) => ({
+            symbol,
+            price_usd: point.close,
+            change_24h_pct: null,
+            as_of: Date.parse(point.date) / 1000,
+          }));
+          // Live ticks that arrived while this was in flight keep the tail:
+          // the seed is history, and history goes in front.
+          next[symbol] = [...asTicks, ...(next[symbol] ?? [])].slice(-MAX_HISTORY);
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [status, symbols]);
+
+  return { status, source, ticks, history };
 }

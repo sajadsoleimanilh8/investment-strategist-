@@ -41,15 +41,15 @@ def _start_scheduler() -> BackgroundScheduler:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler = _start_scheduler() if settings.enable_scheduler else None
-    if settings.enable_market_live:
-        market_live_hub.start()
+    # `start` is a no-op when MARKET_LIVE_SOURCE resolves to off, so the
+    # decision stays in one place (config) instead of being half here.
+    market_live_hub.start()
     try:
         yield
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
-        if settings.enable_market_live:
-            await market_live_hub.stop()
+        await market_live_hub.stop()
 
 
 def create_app() -> FastAPI:

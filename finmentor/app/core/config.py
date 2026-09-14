@@ -20,10 +20,16 @@ class Settings(BaseSettings):
 
     # background jobs (off under pytest; see tests/conftest.py)
     enable_scheduler: bool = True
-    #: the public live-price WebSocket's poll loop (app.market.live). Off
-    #: under pytest and in the e2e webServer, same reasoning as DEMO_MODE:
-    #: no external API on a path tests depend on being deterministic.
-    enable_market_live: bool = True
+    #: Where the public live-price WebSocket gets its prices (app.market.live):
+    #:
+    #:   live  real provider, real prices (the default)
+    #:   mock  deterministic synthetic ticks, which every surface must label
+    #:         as demo data
+    #:   off   no poll loop; the landing page collapses to a static panel
+    #:
+    #: Off under pytest and in the e2e webServer: no external API on a path
+    #: those suites depend on being deterministic.
+    market_live_source: str = "live"
 
     # presentation
     currency_symbol: str = "$"
@@ -84,6 +90,22 @@ class Settings(BaseSettings):
         default_factory=lambda: {"needs": 0.5, "wants": 0.3, "savings": 0.2}
     )
 
+
+    @property
+    def effective_market_live_source(self) -> str:
+        """`market_live_source`, with DEMO_MODE's offline guarantee applied.
+
+        DEMO_MODE means the whole product runs with nothing external
+        reachable, so it can never resolve to `live`: the poll would fail
+        forever and the landing page would sit on "Reconnecting" for the
+        length of the demo, which is the definition of looking broken. It
+        resolves to `off` rather than to `mock` because the section it feeds
+        is headlined "real prices, not a mockup" — a demo that wants a moving
+        ticker asks for `mock` explicitly, and gets a panel labelled as such.
+        """
+        if self.demo_mode and self.market_live_source == "live":
+            return "off"
+        return self.market_live_source
 
     @property
     def jwt_secret_is_default(self) -> bool:

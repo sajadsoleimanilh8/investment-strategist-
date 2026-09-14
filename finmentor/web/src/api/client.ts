@@ -15,7 +15,25 @@
  *    not fire six refreshes and rotate the token out from under each other.
  */
 
-const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+/**
+ * Where the API is.
+ *
+ * `VITE_API_BASE_URL` wins when it is set, which is how a split-origin build
+ * (nginx serving the SPA, the API on another host) is configured. Without it
+ * the fallback differs by build, because the two cases are genuinely
+ * different: in dev the page is on Vite's port and the API is on another, so
+ * it has to be named; in a production build the SPA is served from the API's
+ * own origin, and hard-coding localhost there is a page that only works on
+ * the machine it was built on.
+ *
+ * Exported because the live-market WebSocket has to resolve to the same
+ * place. Two bases that can disagree is a bug waiting for a deploy.
+ */
+export const API_BASE_URL: string =
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? "http://localhost:8000" : window.location.origin);
+
+const BASE_URL = API_BASE_URL;
 const REFRESH_KEY = "finmentor.refresh_token";
 
 export class ApiError extends Error {
