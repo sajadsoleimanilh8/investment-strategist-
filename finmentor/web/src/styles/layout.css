@@ -146,7 +146,21 @@
 .whoami { margin: 0 0 0 auto; display: flex; align-items: center; gap: var(--space-2); }
 
 main { flex: 1; padding: 0 var(--space-3); max-width: var(--measure); }
-main.wide { max-width: none; }
+main.wide { max-width: 68rem; }
+
+/* Two columns on a wide screen, one everywhere else. The headline panel spans
+   both because the score is the thing the page exists to show; the four that
+   follow are independent readouts and sit beside each other happily.
+   Below 900px this rule simply does not apply and the sections stack. */
+@media (min-width: 900px) {
+  main.cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    align-items: start;
+  }
+  main.cols > section:first-child { grid-column: 1 / -1; }
+}
 
 footer { padding: var(--space-4) var(--space-3); }
 
@@ -173,6 +187,11 @@ fieldset { margin-block: var(--space-3); padding: var(--space-3); }
 
 /* Wide tables scroll inside themselves rather than scrolling the page. */
 .table-scroll { overflow-x: auto; }
+/* A caption is a label for the table, so it starts where the table starts. */
+caption { text-align: start; }
+/* "20.0 / 20" is one value and has to stay on one line; wrapped, it reads as
+   two figures stacked in a column of figures. */
+td.numeric, th.numeric { white-space: nowrap; }
 table { width: 100%; }
 th, td { padding: var(--space-2); text-align: left; vertical-align: top; }
 th[scope="row"] { font-weight: normal; }
@@ -374,8 +393,83 @@ tbody td { color: var(--color-mist); }
    every gain and loss the same shade of white. */
 td.numeric:not(.delta-positive):not(.delta-negative) { color: var(--color-text); }
 
+/* Some callers wrap each pair in a div (it keeps the JSX honest when the
+   pairs are mapped). `display: contents` drops the wrapper out of the grid so
+   both spellings produce the same two columns: label, then value. Without it
+   a wrapped list silently becomes a grid of stacked pairs and stops lining up
+   with the unwrapped one next to it. */
+dl.pairs > div { display: contents; }
+
 dl.pairs dt { color: var(--color-muted); font-weight: 400; font-size: 0.875rem; }
 dl.pairs dd { color: var(--color-text); }
+
+/* ---- the headline score -------------------------------------------------
+   The one figure on the dashboard that is sized like a figure. Display
+   tracking works here for the same reason it works on the landing headline:
+   the number is large enough for tight spacing to read as deliberate. */
+h2.score {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+.score__label {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  letter-spacing: normal;
+}
+.score__value {
+  font-size: clamp(2.25rem, 6vw, 3rem);
+  line-height: 1;
+  letter-spacing: var(--tracking-display);
+  color: var(--color-text);
+}
+/* The denominator is context, not value: same line, a third of the weight of
+   attention, so the eye lands on the score itself. */
+.score__max {
+  font-size: 1rem;
+  color: var(--color-muted);
+  margin-inline-start: var(--space-2);
+  letter-spacing: normal;
+}
+
+/* ---- list rows ----------------------------------------------------------
+   A goal or a watchlist entry is a name, a figure, and a line of detail. As
+   one run-on sentence with separators it scans badly at five items and worse
+   at fifteen; split across two lines, the figures form a column the eye can
+   run down. */
+ul.rows { list-style: none; margin: 0; padding: 0; }
+ul.rows > li {
+  padding: var(--space-2) 0;
+  border-block-end: 1px solid var(--color-border);
+}
+ul.rows > li:last-child { border-block-end: 0; }
+.rows__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+.rows__head strong { color: var(--color-text); font-weight: 500; }
+.rows__figure { color: var(--color-text); white-space: nowrap; }
+.rows__detail {
+  display: block;
+  margin-block-start: var(--space-1);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+/* ---- loading skeletons --------------------------------------------------
+   Shaped like what is coming, so the page resolves in place instead of
+   growing out of one line of text. The breathing comes from the shimmer in
+   motion.css, which hangs off the same `aria-busy` the boundary sets. */
+.skeleton {
+  background: var(--color-elevated);
+  border-radius: var(--radius-sm);
+}
+.skeleton--score { height: 3rem; width: min(12rem, 60%); margin-bottom: var(--space-3); }
+.skeleton--line { height: 1rem; width: min(24rem, 90%); }
+.skeleton--row { height: 1.5rem; margin-block-end: var(--space-2); }
 
 /* A figure is the loudest thing on the screen, and it gets there by size and
    tracking rather than by colour — the same move as the headlines. */

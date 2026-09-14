@@ -81,7 +81,7 @@ test.describe("signup to dashboard", () => {
     // 62.3 is what the engine scores this exact profile — the same number the
     // API test and the bot flow assert. If the client ever starts computing
     // its own, this is where it shows.
-    await expect(page.getByRole("heading", { name: /financial health: 62\.3 \/ 100/i }))
+    await expect(page.getByRole("heading", { name: /financial health\s+62\.3\s*\/ 100/i }))
       .toBeVisible();
 
     for (const component of ["Savings rate", "Emergency fund", "Debt load",

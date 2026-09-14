@@ -10,7 +10,29 @@
  * `flow.spec.ts`. They still fail loudly if the page never reaches the state
  * being photographed, because a screenshot of a blank page is worse than none.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * Wait for the entrance to finish before photographing.
+ *
+ * Every page enters on a staggered fade (styles/motion.css), so a capture
+ * taken the moment the heading is visible catches the later sections at
+ * opacity 0 and documents a page that looks half-loaded. Only finite
+ * animations are awaited: the loading shimmer is infinite by design and would
+ * never resolve.
+ */
+async function settled(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document.getAnimations()
+        .filter((animation) => {
+          const timing = animation.effect?.getComputedTiming();
+          return timing !== undefined && timing.iterations !== Infinity;
+        })
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
+}
 
 const PASSWORD = "a-long-enough-password";
 //: Relative to `web/`, where Playwright runs — so up one level into the
@@ -60,9 +82,10 @@ test.describe("screenshots", () => {
     await page.getByRole("button", { name: "Finish" }).click();
 
     // --- 1. the dashboard -------------------------------------------------
-    await expect(page.getByRole("heading", { name: /financial health: 62\.3 \/ 100/i }))
+    await expect(page.getByRole("heading", { name: /financial health\s+62\.3\s*\/ 100/i }))
       .toBeVisible();
     await expect(page.getByText("Financial DNA")).toBeVisible();
+    await settled(page);
     await page.screenshot({ path: `${SHOTS}/dashboard.png`, fullPage: true });
 
     // --- 2. the delta colours ---------------------------------------------
@@ -90,6 +113,7 @@ test.describe("screenshots", () => {
     await expect(watchlist.locator(".delta-positive, .delta-negative").first())
       .toBeVisible();
 
+    await settled(page);
     await page.screenshot({ path: `${SHOTS}/deltas.png`, fullPage: true });
   });
 });

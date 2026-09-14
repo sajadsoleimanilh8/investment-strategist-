@@ -165,7 +165,7 @@ def compute_health_score(twin: FinancialTwinOut) -> HealthScoreOut:
             name="budget_stability",
             points=stability,
             detail=(
-                "no planned budget set yet — neutral score"
+                "no planned budget set yet, so this scores neutral"
                 if deviation is None
                 else f"spending deviated {deviation * 100:.1f}% from the plan"
             ),

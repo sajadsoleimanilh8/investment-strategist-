@@ -136,7 +136,7 @@ COMPONENT_VERDICT_TRAIT = {
 #: A score note inside a detail string — "(20 pts at 25%)". Prose only in the
 #: chat snapshot: a raw scoring rule is one more number to misread.
 _SCORE_NOTE = re.compile(r"\s*\((?:[^()]*\bpts?\b[^()]*)\)")
-_NEUTRAL_NOTE = re.compile(r"\s*—\s*neutral score\s*$")
+_NEUTRAL_NOTE = re.compile(r"\s*,?\s*so this scores neutral\s*$")
 
 
 def plain_detail(detail: str) -> str:

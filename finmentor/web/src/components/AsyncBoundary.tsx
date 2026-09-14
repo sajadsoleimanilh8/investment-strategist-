@@ -21,6 +21,11 @@ interface AsyncBoundaryProps {
   emptyMessage?: string;
   /** Re-run the failed query. Offered on anything that might be transient. */
   onRetry?: () => void;
+  /** A stand-in shaped like the finished screen, shown instead of the word
+   * "Loading". Worth supplying wherever the real content is tall: the page
+   * then resolves in place rather than growing out from one line of text,
+   * which is the difference between a load and a layout shift. */
+  skeleton?: ReactNode;
   children: ReactNode;
 }
 
@@ -39,9 +44,15 @@ function worthRetrying(error: unknown): boolean {
 
 export function AsyncBoundary({
   isLoading, error, isEmpty = false, emptyMessage = "Nothing here yet.",
-  onRetry, children,
+  onRetry, skeleton, children,
 }: AsyncBoundaryProps) {
-  if (isLoading) return <p aria-busy="true">Loading…</p>;
+  // `aria-busy` carries both jobs: it announces the wait, and motion.css
+  // hangs the shimmer off the same attribute, so the two cannot drift.
+  if (isLoading) {
+    return skeleton
+      ? <div aria-busy="true" aria-label="Loading">{skeleton}</div>
+      : <p aria-busy="true">Loading…</p>;
+  }
 
   if (error) {
     return (

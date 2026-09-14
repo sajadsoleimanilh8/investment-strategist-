@@ -28,7 +28,26 @@ const COMPONENT_LABELS: Record<string, string> = {
  */
 function HealthScore({ total }: { total: number }) {
   const shown = useCountUp(total);
-  return <>Financial health: {shown.toFixed(1)} / 100</>;
+  return <>{shown.toFixed(1)}</>;
+}
+
+/** A stand-in shaped like the finished screen. Five rows because the score
+ * always has five components, so the table below does not change height when
+ * the real one arrives. */
+function DashboardSkeleton() {
+  return (
+    <>
+      <section>
+        <div className="skeleton skeleton--score" />
+        <div className="skeleton skeleton--line" />
+      </section>
+      <section>
+        {[0, 1, 2, 3, 4].map((row) => (
+          <div key={row} className="skeleton skeleton--row" />
+        ))}
+      </section>
+    </>
+  );
 }
 
 export function Dashboard() {
@@ -38,7 +57,7 @@ export function Dashboard() {
   });
 
   return (
-    <AsyncBoundary isLoading={isLoading} error={error}>
+    <AsyncBoundary isLoading={isLoading} error={error} skeleton={<DashboardSkeleton />}>
       {data && !data.onboarded && (
         <section>
           <h2>Welcome</h2>
@@ -53,7 +72,17 @@ export function Dashboard() {
       {data?.onboarded && data.health && data.twin && data.dna && (
         <>
           <section>
-            <h2><HealthScore total={data.health.total} /></h2>
+            {/* The score is the reason to open this page, so it is sized like
+                it: the figure carries the heading and the label sits above it
+                in grey, rather than a sentence at heading size with the one
+                number that matters buried in the middle of it. */}
+            <h2 className="score">
+              <span className="score__label">Financial health</span>
+              <span className="score__value">
+                <HealthScore total={data.health.total} />
+                <span className="score__max">/ 100</span>
+              </span>
+            </h2>
             <div className="table-scroll">
               <table>
                 <caption className="disclaimer">
@@ -120,13 +149,17 @@ export function Dashboard() {
                 No goals yet. <Link to="/goals">Add one</Link>.
               </p>
             ) : (
-              <ul>
+              <ul className="rows">
                 {data.goals.map((goal) => (
                   <li key={goal.id}>
-                    <strong>{goal.name}</strong> — {goal.progress_pct.toFixed(1)}%
-                    ({compact(goal.current_amount)} of {compact(goal.target_amount)})
-                    {goal.estimated_completion &&
-                      ` · on track for ${goal.estimated_completion}`}
+                    <span className="rows__head">
+                      <strong>{goal.name}</strong>
+                      <span className="rows__figure">{goal.progress_pct.toFixed(1)}%</span>
+                    </span>
+                    <span className="rows__detail">
+                      {compact(goal.current_amount)} of {compact(goal.target_amount)}
+                      {goal.estimated_completion && `, on track for ${goal.estimated_completion}`}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -140,18 +173,24 @@ export function Dashboard() {
                 Nothing tracked. <Link to="/market">Add a symbol</Link>.
               </p>
             ) : (
-              <ul>
+              <ul className="rows">
                 {data.watchlist.map((item) => (
                   <li key={item.symbol}>
-                    <strong>{item.symbol}</strong> {compact(item.latest_price)} · 7d{" "}
-                    <span
-                      className={
-                        item.change_7d_pct >= 0 ? "delta-positive" : "delta-negative"
-                      }
-                    >
-                      {item.change_7d_pct.toFixed(2)}%
-                    </span>{" "}
-                    · {item.trend}
+                    <span className="rows__head">
+                      <strong>{item.symbol}</strong>
+                      <span className="rows__figure">
+                        {compact(item.latest_price)}{" "}
+                        <span
+                          className={
+                            item.change_7d_pct >= 0 ? "delta-positive" : "delta-negative"
+                          }
+                        >
+                          {item.change_7d_pct >= 0 ? "+" : ""}
+                          {item.change_7d_pct.toFixed(2)}%
+                        </span>
+                      </span>
+                    </span>
+                    <span className="rows__detail">7-day movement, trending {item.trend.toLowerCase()}</span>
                   </li>
                 ))}
               </ul>
