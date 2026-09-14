@@ -11,6 +11,10 @@
 #      (scripts/demo_check.py), with Ollama pointed at a closed port
 #   3. the same flow through a browser (Playwright), against an API whose model
 #      host is equally closed
+#   4. the suite again, inside the API image, against the versions in
+#      requirements.txt — the local environment has drifted from the pins, and
+#      twice a name present in the newer library and absent from the pinned one
+#      has shipped and broken a user-facing path
 #
 # The model being *unreachable* rather than faked is the point of steps 2 and 3.
 # A fake provider would let both pass while proving nothing about the promise
@@ -31,7 +35,7 @@ step() {
   printf '\n\033[1m==> %s\033[0m\n' "$1"
 }
 
-step "1/3  tests, with the app/services coverage floor"
+step "1/4  tests, with the app/services coverage floor"
 if python -m pytest --cov --cov-fail-under=100 -q; then
   echo "    passed"
 else
@@ -39,7 +43,7 @@ else
   failed=1
 fi
 
-step "2/3  Definition-of-Done flow — engine + bot pipeline, no network"
+step "2/4  Definition-of-Done flow — engine + bot pipeline, no network"
 if python scripts/demo_check.py; then
   echo "    passed"
 else
@@ -47,8 +51,16 @@ else
   failed=1
 fi
 
-step "3/3  the same flow in a browser"
+step "3/4  the same flow in a browser"
 if (cd web && npm run test:e2e -- e2e/flow.spec.ts ${STRICT:+-- --strict}); then
+  echo "    passed"
+else
+  echo "    FAILED"
+  failed=1
+fi
+
+step "4/4  the suite against the versions that actually ship"
+if bash scripts/check_pinned.sh; then
   echo "    passed"
 else
   echo "    FAILED"
