@@ -32,6 +32,8 @@ const ASSETS = [
 
 const SYMBOLS = ASSETS.map((asset) => asset.symbol);
 
+type Symbol_ = (typeof ASSETS)[number]["symbol"];
+
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   connecting: "Connecting",
   live: "Live",
@@ -65,6 +67,80 @@ function Reveal({ className = "", children, ...rest }: JSX.IntrinsicElements["se
 
 /** The dot follows the *source* first and the connection second: a synthetic
  * feed is not a green light, however healthy the socket is. */
+const tabId = (symbol: string) => `asset-tab-${symbol}`;
+const panelId = (symbol: string) => `asset-panel-${symbol}`;
+
+/**
+ * The asset switcher, as an actual tab widget.
+ *
+ * It looked like one and behaved like three unrelated buttons: every tab was
+ * in the page's tab order, the arrow keys did nothing, and no element claimed
+ * to be the panel the tabs control, so the price block changed without a
+ * screen reader ever being told that is what the press did.
+ *
+ * The WAI-ARIA pattern this now follows has three parts. Roving tabindex: one
+ * stop for the whole group, so Tab moves past the switcher rather than
+ * through it. Arrow keys (and Home/End) move between tabs, wrapping. And the
+ * selection follows focus — automatic activation, which is right here because
+ * switching costs nothing: the data for all three is already in memory.
+ */
+function AssetTabs({
+  active, onSelect,
+}: {
+  active: Symbol_;
+  onSelect: (symbol: Symbol_) => void;
+}) {
+  const index = ASSETS.findIndex((asset) => asset.symbol === active);
+
+  function move(to: number) {
+    // Wrapping, because a tab strip is a loop rather than a line with ends.
+    const next = ASSETS[(to + ASSETS.length) % ASSETS.length];
+    onSelect(next.symbol);
+    document.getElementById(tabId(next.symbol))?.focus();
+  }
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const handlers: Record<string, () => void> = {
+      ArrowRight: () => move(index + 1),
+      ArrowLeft: () => move(index - 1),
+      Home: () => move(0),
+      End: () => move(ASSETS.length - 1),
+    };
+    const handler = handlers[event.key];
+    if (!handler) return;
+    event.preventDefault();      // stop Home/End scrolling the page instead
+    handler();
+  }
+
+  return (
+    <div className="landing-market__tabs" role="tablist" aria-label="Asset" onKeyDown={onKeyDown}>
+      <span
+        className="landing-tab-indicator"
+        style={{ transform: `translateX(${index * 100}%)` }}
+        aria-hidden="true"
+      />
+      {ASSETS.map((asset) => {
+        const selected = asset.symbol === active;
+        return (
+          <button
+            key={asset.symbol}
+            id={tabId(asset.symbol)}
+            role="tab"
+            type="button"
+            aria-selected={selected}
+            aria-controls={panelId(asset.symbol)}
+            tabIndex={selected ? 0 : -1}
+            className={`landing-tab${selected ? " is-active" : ""}`}
+            onClick={() => onSelect(asset.symbol)}
+          >
+            {asset.symbol}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function StatusDot({ status, demo }: { status: ConnectionStatus; demo: boolean }) {
   return <span className={`status-dot status-dot--${demo ? "demo" : status}`} aria-hidden="true" />;
 }
@@ -96,7 +172,7 @@ function LivePriceValue({ price }: { price: number }) {
 }
 
 export function Landing() {
-  const [activeSymbol, setActiveSymbol] = useState<(typeof ASSETS)[number]["symbol"]>("BTC");
+  const [activeSymbol, setActiveSymbol] = useState<Symbol_>("BTC");
   const { status, source, ticks, history } = useLiveMarket(SYMBOLS);
   // The nav is bare over the intro and grows a ground once the intro is past
   // it — see the note on .landing-nav in landing.css for why it does not hide.
@@ -175,27 +251,17 @@ export function Landing() {
             </p>
           ) : (
           <>
-          <div className="landing-market__tabs" role="tablist" aria-label="Asset">
-            <span
-              className="landing-tab-indicator"
-              style={{ transform: `translateX(${ASSETS.findIndex((a) => a.symbol === activeSymbol) * 100}%)` }}
-              aria-hidden="true"
-            />
-            {ASSETS.map((asset) => (
-              <button
-                key={asset.symbol}
-                role="tab"
-                aria-selected={activeSymbol === asset.symbol}
-                className={`landing-tab${activeSymbol === asset.symbol ? " is-active" : ""}`}
-                onClick={() => setActiveSymbol(asset.symbol)}
-              >
-                {asset.symbol}
-              </button>
-            ))}
-          </div>
+          <AssetTabs active={activeSymbol} onSelect={setActiveSymbol} />
 
           <div className="landing-market__body">
-            <div className="landing-market__content" key={activeSymbol}>
+            <div
+              className="landing-market__content"
+              key={activeSymbol}
+              role="tabpanel"
+              id={panelId(activeSymbol)}
+              aria-labelledby={tabId(activeSymbol)}
+              tabIndex={0}
+            >
               <div className="landing-market__figures">
                 {activeTick ? (
                   <>

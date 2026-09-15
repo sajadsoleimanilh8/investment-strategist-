@@ -115,5 +115,22 @@ test.describe("screenshots", () => {
 
     await settled(page);
     await page.screenshot({ path: `${SHOTS}/deltas.png`, fullPage: true });
+
+    // --- 3. a simulation, with its result on screen -----------------------
+    // The page is worth photographing only in the state it exists for: an
+    // empty form says nothing about what the simulator does.
+    await page.getByRole("link", { name: "Simulate" }).click();
+    await page.getByLabel(/extra saved each month/i).fill("5000000");
+    await page.getByRole("button", { name: "Run it" }).click();
+    await expect(page.getByRole("columnheader", { name: "Change" })).toBeVisible();
+    await settled(page);
+    await page.screenshot({ path: `${SHOTS}/simulate.png`, fullPage: true });
+
+    // --- 4. the lesson list, with one open --------------------------------
+    await page.getByRole("link", { name: "Learn" }).click();
+    await page.getByRole("button", { name: /budgeting/i }).first().click();
+    await expect(page.getByRole("heading", { name: /for example/i })).toBeVisible();
+    await settled(page);
+    await page.screenshot({ path: `${SHOTS}/learn.png`, fullPage: true });
   });
 });

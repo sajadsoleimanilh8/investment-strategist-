@@ -156,7 +156,10 @@ export function Simulate() {
 
   return (
     <>
-      <section>
+      {/* The widest table on the page, and the simulator people reach for
+          first, so it takes the full width and the other two share the row
+          below it. */}
+      <section className="span">
         <h2>What if I saved more?</h2>
         <form onSubmit={submitWhatIf}>
           <Field

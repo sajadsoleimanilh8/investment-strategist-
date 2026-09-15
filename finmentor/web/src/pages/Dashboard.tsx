@@ -71,7 +71,9 @@ export function Dashboard() {
 
       {data?.onboarded && data.health && data.twin && data.dna && (
         <>
-          <section>
+          {/* `span` because the score is the page's headline, not one panel
+              among four. See main.cols in layout.css. */}
+          <section className="span">
             {/* The score is the reason to open this page, so it is sized like
                 it: the figure carries the heading and the label sits above it
                 in grey, rather than a sentence at heading size with the one

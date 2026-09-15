@@ -13,14 +13,23 @@ const LINKS = [
   ["/profile", "Profile"],
 ] as const;
 
-/** The two pages that are not prose. The dashboard is a grid of independent
- * panels (`cols`); the market page is one seven-column table, which needs the
- * width but not a second column beside it. Everything else keeps the 68ch
- * reading measure, because a form or a page of explanations is read rather
- * than scanned. */
+/** The pages that are not a column of prose.
+ *
+ * `wide` lifts the 68ch reading measure; `cols` adds the two-column grid on
+ * top of it. The dashboard is a grid of independent panels, Simulate is three
+ * simulators that do not need to be read in order, Learn is a list beside the
+ * lesson it opens, and Goals is a table beside the form that adds to it.
+ * Market takes the width for its seven-column table but not a second column
+ * beside it.
+ *
+ * Everything else keeps the measure, because a form or a page of
+ * explanations is read rather than scanned. */
 const WIDTH_CLASS: Record<string, string> = {
   "/dashboard": "wide cols",
   "/market": "wide",
+  "/simulate": "wide cols",
+  "/learn": "wide cols",
+  "/goals": "wide cols",
 };
 
 export function Layout() {

@@ -159,7 +159,13 @@ main.wide { max-width: 68rem; }
     gap: var(--space-4);
     align-items: start;
   }
-  main.cols > section:first-child { grid-column: 1 / -1; }
+  /* Opt-in rather than "the first one": on the dashboard the panel that
+     spans is the score, on Simulate it is the what-if table, and on Learn
+     nothing spans because the list and the open lesson are the two columns.
+     Anything that is not a section (a page-level disclaimer, say) spans too,
+     since it belongs to the whole page rather than to a column. */
+  main.cols > section.span,
+  main.cols > :not(section) { grid-column: 1 / -1; }
 }
 
 footer { padding: var(--space-4) var(--space-3); }
@@ -208,6 +214,10 @@ td.numeric, th.numeric { white-space: nowrap; }
 table { width: 100%; }
 th, td { padding: var(--space-2); text-align: left; vertical-align: top; }
 th[scope="row"] { font-weight: normal; }
+/* Cells are top-aligned so a wrapping detail column starts on the same line
+   as its label. A cell holding a control is the exception: a pill sitting at
+   the top of a row it is taller than reads as belonging to the row above. */
+td:has(button) { vertical-align: middle; }
 td.numeric, th.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 
 .stack { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -562,7 +572,15 @@ ol.steps li[data-done="true"] { color: var(--color-positive); }
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0 var(--space-3);
   }
-  fieldset.grid-2 > legend { grid-column: 1 / -1; }
+  /* The legend labels the whole group, and so does any prose inside it: a
+     hint occupying one of the two cells pushes the first field into the
+     second column and the pairs stop lining up from there on.
+
+     `p:not(.field)` because `Field` renders a `p.field` — spanning every
+     paragraph would span every field too, which is a one-column form with
+     extra steps. */
+  fieldset.grid-2 > legend,
+  fieldset.grid-2 > p:not(.field) { grid-column: 1 / -1; }
 }
 
 /* Confirmation of something that worked. Positive is the delta token, used

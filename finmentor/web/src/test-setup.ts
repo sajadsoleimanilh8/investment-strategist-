@@ -54,3 +54,31 @@ for (const name of ["localStorage", "sessionStorage"] as const) {
     });
   }
 }
+
+/**
+ * A `matchMedia` that answers "no preference".
+ *
+ * jsdom does not implement it at all, and `useInView` asks it whether the
+ * reader has reduced motion turned on. Without this, rendering any page that
+ * reveals a section throws rather than failing an assertion — the error is
+ * about the environment, not the component.
+ *
+ * It reports no-preference rather than reduce, so tests exercise the moving
+ * path, which is the one with something to get wrong.
+ */
+if (typeof window !== "undefined" && !window.matchMedia) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
