@@ -32,20 +32,25 @@ export function Login() {
   }
 
   return (
-    <section>
-      <h2>Sign in</h2>
-      <form onSubmit={submit}>
-        <Field label="Email" type="email" value={email} autoComplete="email" required
-               onChange={(e) => setEmail(e.target.value)} />
-        <Field label="Password" type="password" value={password} required
-               autoComplete="current-password"
-               onChange={(e) => setPassword(e.target.value)} />
-        <FormError message={error} />
-        <div className="actions">
-          <button type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-        </div>
-      </form>
-      <p>No account? <Link to="/signup">Create one</Link>.</p>
-    </section>
+    <div className="auth stagger">
+      {/* The only way back to the marketing page. Someone who arrives here
+          from a bookmark otherwise has no route to "/" and no brand anchor. */}
+      <Link to="/" className="auth__mark">FinMentor</Link>
+      <section className="auth__card">
+        <h2>Sign in</h2>
+        <form onSubmit={submit}>
+          <Field label="Email" type="email" value={email} autoComplete="email" required
+                 onChange={(e) => setEmail(e.target.value)} />
+          <Field label="Password" type="password" value={password} required
+                 autoComplete="current-password"
+                 onChange={(e) => setPassword(e.target.value)} />
+          <FormError message={error} />
+          <div className="actions">
+            <button type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+          </div>
+        </form>
+      </section>
+      <p className="auth__alt">No account? <Link to="/signup">Create one</Link>.</p>
+    </div>
   );
 }

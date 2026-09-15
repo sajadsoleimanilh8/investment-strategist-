@@ -114,12 +114,27 @@ export function Onboarding() {
   return (
     <section>
       <h2>Set up your profile</h2>
-      <p>
-        Step {step + 1} of {STEPS.length}: {STEPS[step]}. Nothing is saved until
-        the last step.
-      </p>
+      {/* All four steps, with the current one marked and the finished ones
+          in the positive token. A single sentence says where you are; the
+          list says what is still coming, which is what decides whether
+          someone finishes. */}
+      <ol className="steps">
+        {STEPS.map((label, index) => (
+          <li
+            key={label}
+            aria-current={index === step ? "step" : undefined}
+            data-done={index < step}
+          >
+            {label}
+          </li>
+        ))}
+      </ol>
+      <p className="muted">Nothing is saved until the last step.</p>
 
-      <form onSubmit={next}>
+      {/* Keyed on the step so each one enters rather than swapping in place:
+          the fields change completely between steps, and without the beat the
+          form reads as having jumped rather than advanced. */}
+      <form onSubmit={next} key={step} className="result">
         {step === 0 && (
           <fieldset>
             <legend>What comes in</legend>
@@ -138,9 +153,9 @@ export function Onboarding() {
         )}
 
         {step === 1 && (
-          <fieldset>
+          <fieldset className="grid-2">
             <legend>What goes out each month</legend>
-            <p>Leave anything you do not spend on blank.</p>
+            <p className="muted">Leave anything you do not spend on blank.</p>
             {EXPENSE_CATEGORIES.map((category) => (
               <Field
                 key={category}
@@ -186,7 +201,7 @@ export function Onboarding() {
           <fieldset>
             <legend>Something to aim at (optional)</legend>
             <Field label="What are you saving for?" value={goalName}
-                   hint="Leave blank to skip — you can add one any time."
+                   hint="Leave blank to skip. You can add one any time."
                    onChange={(e) => setGoalName(e.target.value)} />
             <Field label="What does it cost?" inputMode="numeric" value={goalTarget}
                    onChange={(e) => setGoalTarget(e.target.value)} />
@@ -198,11 +213,11 @@ export function Onboarding() {
               <label htmlFor="priority">How important is it?</label>
               <select id="priority" value={goalPriority}
                       onChange={(e) => setGoalPriority(Number(e.target.value))}>
-                <option value={1}>1 — highest</option>
+                <option value={1}>1 (highest)</option>
                 <option value={2}>2</option>
-                <option value={3}>3 — normal</option>
+                <option value={3}>3 (normal)</option>
                 <option value={4}>4</option>
-                <option value={5}>5 — lowest</option>
+                <option value={5}>5 (lowest)</option>
               </select>
             </p>
           </fieldset>

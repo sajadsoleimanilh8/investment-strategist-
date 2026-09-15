@@ -37,21 +37,26 @@ export function Signup() {
   }
 
   return (
-    <section>
-      <h2>Create an account</h2>
-      <form onSubmit={submit}>
-        <Field label="Email" type="email" value={email} autoComplete="email" required
-               onChange={(e) => setEmail(e.target.value)} />
-        <Field label="Password" type="password" value={password} required
-               autoComplete="new-password"
-               hint={`At least ${MIN_PASSWORD_LENGTH} characters. Length beats punctuation.`}
-               onChange={(e) => setPassword(e.target.value)} />
-        <FormError message={error} />
-        <div className="actions">
-          <button type="submit" disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
-        </div>
-      </form>
-      <p>Already have one? <Link to="/login">Sign in</Link>.</p>
-    </section>
+    <div className="auth stagger">
+      {/* The only way back to the marketing page. Someone who arrives here
+          from a bookmark otherwise has no route to "/" and no brand anchor. */}
+      <Link to="/" className="auth__mark">FinMentor</Link>
+      <section className="auth__card">
+        <h2>Create an account</h2>
+        <form onSubmit={submit}>
+          <Field label="Email" type="email" value={email} autoComplete="email" required
+                 onChange={(e) => setEmail(e.target.value)} />
+          <Field label="Password" type="password" value={password} required
+                 autoComplete="new-password"
+                 hint={`At least ${MIN_PASSWORD_LENGTH} characters. Length beats punctuation.`}
+                 onChange={(e) => setPassword(e.target.value)} />
+          <FormError message={error} />
+          <div className="actions">
+            <button type="submit" disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
+          </div>
+        </form>
+      </section>
+      <p className="auth__alt">Already have one? <Link to="/login">Sign in</Link>.</p>
+    </div>
   );
 }
