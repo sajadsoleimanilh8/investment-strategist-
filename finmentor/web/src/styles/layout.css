@@ -544,6 +544,8 @@ ul.choices button { width: 100%; text-align: start; }
 .auth__card h2 { margin-block-start: 0; }
 .auth__card form { max-width: none; }
 .auth__alt { color: var(--color-muted); font-size: 0.875rem; margin: 0; }
+/* A secondary way out, inside the card and under the form it belongs to. */
+.auth__aside { font-size: 0.875rem; margin: var(--space-3) 0 0; }
 
 /* ---- onboarding progress ------------------------------------------------
    Four steps, all four visible, the current one marked. One sentence saying

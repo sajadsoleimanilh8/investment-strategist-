@@ -49,6 +49,9 @@ export function Login() {
             <button type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
           </div>
         </form>
+        <p className="auth__aside">
+          <Link to="/forgot-password">Forgot your password?</Link>
+        </p>
       </section>
       <p className="auth__alt">No account? <Link to="/signup">Create one</Link>.</p>
     </div>

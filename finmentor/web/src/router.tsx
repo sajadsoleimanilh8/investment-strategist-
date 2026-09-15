@@ -15,6 +15,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { Ask } from "./pages/Ask";
 import { Dashboard } from "./pages/Dashboard";
 import { Goals } from "./pages/Goals";
+import { ForgotPassword } from "./pages/ForgotPassword";
 import { Landing } from "./pages/Landing";
 import { Learn } from "./pages/Learn";
 import { Login } from "./pages/Login";
@@ -22,6 +23,7 @@ import { Market } from "./pages/Market";
 import { NotFound } from "./pages/NotFound";
 import { Onboarding } from "./pages/Onboarding";
 import { Profile } from "./pages/Profile";
+import { ResetPassword } from "./pages/ResetPassword";
 import { RootGate } from "./pages/RootGate";
 import { Signup } from "./pages/Signup";
 import { Simulate } from "./pages/Simulate";
@@ -32,6 +34,10 @@ export const router = createBrowserRouter([
   { path: "/", element: <RootGate><Landing /></RootGate> },
   { path: "/signup", element: <Signup /> },
   { path: "/login", element: <Login /> },
+  // Both sit outside the layout with signup and login, and for the same
+  // reason: everyone who reaches them is signed out by definition.
+  { path: "/forgot-password", element: <ForgotPassword /> },
+  { path: "/reset-password", element: <ResetPassword /> },
   {
     // A pathless layout route: it contributes no URL segment of its own, so
     // every child keeps its existing absolute path (no "/app/..." migration).

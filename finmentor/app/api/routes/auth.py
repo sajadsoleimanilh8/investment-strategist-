@@ -17,9 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import CurrentUser, DbSession, auth_rate_limit
 from app.core import security
 from app.core.config import settings
+from app.core.mailer import Message, send_quietly
+from app.repositories import password_resets as resets_repo
 from app.repositories import profiles as profiles_repo
+from app.models.user import User
 from app.repositories import users as users_repo
-from app.schemas.auth import LoginIn, MeOut, RefreshIn, SignupIn, TokenPair
+from app.schemas.auth import (
+    ForgotPasswordIn, LoginIn, MeOut, RefreshIn, ResetPasswordIn, SignupIn, TokenPair,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -27,11 +32,25 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 #: hands an attacker a free account-existence oracle.
 BAD_CREDENTIALS = "email or password is incorrect"
 
+#: The same sentence whether or not the address is registered, for the same
+#: reason. It is deliberately about the *address*, not the account.
+RESET_SENT = "if that address has an account, a reset link is on its way"
 
-def _pair(user_id: int) -> TokenPair:
+#: One refusal for a token that never existed, one that was already spent, and
+#: one that expired. The difference is not something the holder of a bad link
+#: can act on, and each distinction is a thing worth learning by guessing.
+BAD_RESET = "that reset link is no longer valid. Ask for a new one."
+
+
+def _pair(user: User) -> TokenPair:
+    """A fresh pair, stamped with the user's current token version.
+
+    Takes the row rather than the id so the version cannot be forgotten: a
+    pair minted without it would be born already invalid.
+    """
     return TokenPair(
-        access_token=security.create_access_token(user_id),
-        refresh_token=security.create_refresh_token(user_id),
+        access_token=security.create_access_token(user.id, user.token_version),
+        refresh_token=security.create_refresh_token(user.id, user.token_version),
         expires_in=settings.access_token_ttl_minutes * 60,
     )
 
@@ -52,7 +71,7 @@ def signup(payload: SignupIn, db: DbSession) -> TokenPair:
     except IntegrityError:                       # two signups raced for one email
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "that email is already registered")
-    return _pair(user.id)
+    return _pair(user)
 
 
 @router.post("/login", response_model=TokenPair,
@@ -65,19 +84,26 @@ def login(payload: LoginIn, db: DbSession) -> TokenPair:
     if security.needs_rehash(user.password_hash):
         users_repo.set_password(db, user, security.hash_password(payload.password))
         db.commit()
-    return _pair(user.id)
+    return _pair(user)
 
 
 @router.post("/refresh", response_model=TokenPair)
 def refresh(payload: RefreshIn, db: DbSession) -> TokenPair:
     try:
-        user_id = security.decode_token(payload.refresh_token, expect=security.REFRESH)
+        claims = security.decode_claims(payload.refresh_token, expect=security.REFRESH)
     except security.TokenError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
 
-    if users_repo.get(db, user_id) is None:      # deleted since the token was issued
+    user = users_repo.get(db, claims.user_id)
+    if user is None:                             # deleted since the token was issued
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token is not valid")
-    return _pair(user_id)
+    # Checked here as well as in the guard: without it a refresh token from
+    # before a password reset would mint a valid access token, and the reset
+    # would have ended nothing.
+    if claims.version != user.token_version:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                            "this session ended when the password was changed")
+    return _pair(user)
 
 
 # `response_class=Response` and no return annotation: FastAPI reads `-> None`
@@ -100,3 +126,75 @@ def me(user: CurrentUser, db: DbSession) -> MeOut:
         locale=user.locale, risk_profile=user.risk_profile,
         onboarded=profiles_repo.get_by_user(db, user.id) is not None,
     )
+
+
+# --- forgotten passwords -------------------------------------------------
+
+def _reset_email(link: str) -> str:
+    """The whole email. Plain text: this is four sentences and a link, and
+    an HTML part would only give a mail client more ways to mangle it."""
+    return f"""Someone asked to reset the password on your FinMentor account.
+
+{link}
+
+The link works once and expires in {settings.password_reset_ttl_minutes} minutes.
+
+If it was not you, nothing has changed and you can ignore this. Your password
+only changes when the link is used."""
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED,
+             dependencies=[Depends(auth_rate_limit)])
+def forgot_password(payload: ForgotPasswordIn, db: DbSession) -> dict[str, str]:
+    """Send a reset link, and say the same thing either way.
+
+    202 and one sentence whether or not the address is registered. Anything
+    else — a 404, a different message, a measurably faster response — turns
+    this into a way to find out who has an account here, which is worth more
+    to an attacker than it sounds: it is the first half of credential
+    stuffing, and it is a disclosure the person never agreed to.
+
+    The send itself is best-effort (`send_quietly`). A mail outage must not
+    become a 500 on one address and a 202 on another.
+    """
+    user = users_repo.get_by_email(db, payload.email)
+    if user is not None and user.email:
+        # Asking again retires the previous link rather than leaving two keys
+        # to the same account in the same inbox.
+        resets_repo.invalidate_outstanding(db, user.id)
+        raw, hashed = security.new_reset_token()
+        resets_repo.create(db, user_id=user.id, token_hash=hashed)
+        db.commit()
+        send_quietly(Message(
+            to=user.email,
+            subject="Reset your FinMentor password",
+            body=_reset_email(f"{settings.web_base_url}/reset-password?token={raw}"),
+        ))
+    return {"message": RESET_SENT}
+
+
+@router.post("/reset-password", response_model=TokenPair,
+             dependencies=[Depends(auth_rate_limit)])
+def reset_password(payload: ResetPasswordIn, db: DbSession) -> TokenPair:
+    """Spend a reset link: set the new password, end every older session.
+
+    The pair comes back because the person has just proved they hold the
+    address and chosen a password; making them type it again on a login form
+    proves nothing further. Every token older than this moment stops working,
+    which is the point of the exercise — a reset that leaves the sessions the
+    old password started running has not taken the account back.
+    """
+    reset = resets_repo.usable(db, security.hash_reset_token(payload.token))
+    if reset is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_RESET)
+
+    user = users_repo.get(db, reset.user_id)
+    if user is None:                              # deleted while the link sat in an inbox
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, BAD_RESET)
+
+    users_repo.set_password(db, user, security.hash_password(payload.password))
+    resets_repo.spend(db, reset)
+    resets_repo.invalidate_outstanding(db, user.id)
+    resets_repo.end_existing_sessions(db, user)
+    db.commit()
+    return _pair(user)

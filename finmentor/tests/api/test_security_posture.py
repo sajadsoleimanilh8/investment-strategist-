@@ -73,7 +73,23 @@ def test_production_refuses_to_start_on_the_development_key():
 
 
 def test_production_starts_with_a_real_key():
-    Settings(demo_mode=False, jwt_secret="a" * 64).check_production()
+    Settings(demo_mode=False, jwt_secret="a" * 64,
+             mail_transport="smtp").check_production()
+
+
+# --- the mail transport --------------------------------------------------
+
+def test_production_refuses_to_start_on_the_console_mailer():
+    """The console transport logs reset links in full. That is what makes an
+    offline demo possible and what makes it unusable in production: a link in
+    a log is a bearer credential anybody with log access can spend."""
+    with pytest.raises(RuntimeError, match="MAIL_TRANSPORT"):
+        Settings(demo_mode=False, jwt_secret="a" * 64,
+                 mail_transport="console").check_production()
+
+
+def test_a_demo_may_keep_the_console_mailer():
+    Settings(demo_mode=True, mail_transport="console").check_production()
 
 
 def test_a_demo_may_keep_the_development_key():

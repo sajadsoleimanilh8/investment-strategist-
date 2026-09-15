@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from app.models.auth import PasswordReset
     from app.models.finance import ExpenseRecord, FinancialProfile, IncomeRecord
     from app.models.goal import FinancialGoal
     from app.models.market import WatchlistItem
@@ -41,6 +42,17 @@ class User(Base, TimestampMixin):
                                               default=None)
     password_hash: Mapped[str | None] = mapped_column(String(255), default=None)
     locale: Mapped[str] = mapped_column(String(8), default="en")
+    #: Bumped whenever every existing session must stop working — today, a
+    #: completed password reset. Tokens carry the version they were minted
+    #: under and are refused when it no longer matches.
+    #:
+    #: A counter rather than a timestamp, and that is not a detail. The
+    #: obvious design is "refuse tokens issued before the reset", but `iat` is
+    #: whole seconds, so a token minted in the same second as the reset
+    #: survives it — and a cutoff placed one second later would refuse the
+    #: pair the reset itself hands back. A counter has no such window: it
+    #: changes, and everything minted under the old value is dead immediately.
+    token_version: Mapped[int] = mapped_column(default=0, server_default="0")
     risk_profile: Mapped[str | None] = mapped_column(String(16), default=None)
 
     profile: Mapped[FinancialProfile | None] = relationship(
@@ -59,6 +71,9 @@ class User(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     simulations: Mapped[list[Simulation]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    password_resets: Mapped[list[PasswordReset]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     chat_sessions: Mapped[list[ChatSession]] = relationship(

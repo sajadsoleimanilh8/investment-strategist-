@@ -28,6 +28,15 @@ class RefreshIn(BaseModel):
     refresh_token: str = Field(min_length=1)
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=256)
+
+
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str

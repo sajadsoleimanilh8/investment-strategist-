@@ -21,6 +21,9 @@ Token design:
 """
 from __future__ import annotations
 
+import hashlib
+import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -73,27 +76,44 @@ def needs_rehash(password_hash: str) -> bool:
 
 # --- tokens --------------------------------------------------------------
 
-def _encode(subject: int, kind: str, lifetime: timedelta) -> str:
+def _encode(subject: int, kind: str, lifetime: timedelta, version: int) -> str:
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": str(subject),        # a string: the JWT spec says so, and PyJWT enforces it
         "typ": kind,
+        "ver": version,             # `users.token_version` when this was minted
         "iat": int(now.timestamp()),
         "exp": int((now + lifetime).timestamp()),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
 
 
-def create_access_token(user_id: int) -> str:
-    return _encode(user_id, ACCESS, timedelta(minutes=settings.access_token_ttl_minutes))
+def create_access_token(user_id: int, version: int = 0) -> str:
+    return _encode(user_id, ACCESS,
+                   timedelta(minutes=settings.access_token_ttl_minutes), version)
 
 
-def create_refresh_token(user_id: int) -> str:
-    return _encode(user_id, REFRESH, timedelta(days=settings.refresh_token_ttl_days))
+def create_refresh_token(user_id: int, version: int = 0) -> str:
+    return _encode(user_id, REFRESH,
+                   timedelta(days=settings.refresh_token_ttl_days), version)
 
 
-def decode_token(token: str, *, expect: str = ACCESS) -> int:
-    """The user id inside a valid token of the expected kind.
+@dataclass(frozen=True)
+class TokenClaims:
+    user_id: int
+    #: When this token was signed. Informational: the guard compares `version`,
+    #: not this, because `iat` is whole seconds and that is too coarse to
+    #: separate a reset from a session started in the same second as it.
+    issued_at: datetime
+    #: `users.token_version` at the moment of minting. A token whose version no
+    #: longer matches the user's is refused. Absent on tokens issued before
+    #: this claim existed, which read as 0 — the value every account starts
+    #: at, so the upgrade itself signs nobody out.
+    version: int = 0
+
+
+def decode_claims(token: str, *, expect: str = ACCESS) -> TokenClaims:
+    """The claims inside a valid token of the expected kind.
 
     Raises `TokenError` for anything else — expired, tampered, wrong secret, or
     a refresh token presented where an access token belongs.
@@ -108,9 +128,47 @@ def decode_token(token: str, *, expect: str = ACCESS) -> int:
     if payload.get("typ") != expect:
         raise TokenError(f"expected a {expect} token")
     try:
-        return int(payload["sub"])
-    except (KeyError, TypeError, ValueError) as exc:
+        user_id = int(payload["sub"])
+        issued_at = datetime.fromtimestamp(int(payload["iat"]), tz=timezone.utc)
+        version = int(payload.get("ver", 0))
+    except (KeyError, TypeError, ValueError, OSError, OverflowError) as exc:
         raise TokenError("token has no usable subject") from exc
+    return TokenClaims(user_id=user_id, issued_at=issued_at, version=version)
+
+
+def decode_token(token: str, *, expect: str = ACCESS) -> int:
+    """Just the user id. The shape most callers want."""
+    return decode_claims(token, expect=expect).user_id
+
+
+# --- reset tokens --------------------------------------------------------
+
+#: Long enough that guessing is hopeless, short enough to survive an email
+#: client wrapping the line. `token_urlsafe(32)` is 256 bits.
+RESET_TOKEN_BYTES = 32
+
+
+def new_reset_token() -> tuple[str, str]:
+    """A reset token and the hash to store: `(raw, hashed)`.
+
+    Deliberately not a JWT. A reset has to be single-use, and single-use means
+    the server has to remember whether it was spent — which a stateless token
+    cannot do. Once there is a row anyway, the row may as well be the whole
+    mechanism.
+    """
+    raw = secrets.token_urlsafe(RESET_TOKEN_BYTES)
+    return raw, hash_reset_token(raw)
+
+
+def hash_reset_token(raw: str) -> str:
+    """SHA-256, not argon2.
+
+    Password hashing is deliberately slow because a password is short, human
+    and often reused. A 256-bit random token is none of those: there is no
+    dictionary to run against it, so the only thing an expensive hash would
+    add here is a lookup slow enough to be a denial-of-service lever.
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def bearer_token(authorization: str | None) -> str:

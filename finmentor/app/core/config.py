@@ -31,6 +31,22 @@ class Settings(BaseSettings):
     #: those suites depend on being deterministic.
     market_live_source: str = "live"
 
+    # email ------------------------------------------------------------------
+    #: console | smtp. Console logs the message instead of sending it, which
+    #: is what keeps the reset flow completable with nothing reachable.
+    mail_transport: str = "console"
+    mail_from: str = "FinMentor <no-reply@finmentor.local>"
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    #: Where a reset link points. The API and the SPA are not always the same
+    #: origin, and the link has to open the *page*, not the endpoint.
+    web_base_url: str = "http://localhost:5173"
+    #: Short on purpose: a reset link is a bearer credential sitting in an
+    #: inbox, and an hour is long enough to read an email.
+    password_reset_ttl_minutes: int = 60
+
     # presentation
     currency_symbol: str = "$"
 
@@ -125,6 +141,14 @@ class Settings(BaseSettings):
                 "JWT_SECRET is still the development default. Generate one "
                 "with `python -c \"import secrets; print(secrets.token_hex(32))\"` "
                 "and put it in .env before running outside DEMO_MODE."
+            )
+        if self.mail_transport == "console":
+            raise RuntimeError(
+                "MAIL_TRANSPORT is 'console', which writes password-reset "
+                "links to the log instead of sending them. A reset link is a "
+                "bearer credential; in a log it is one anybody with log access "
+                "can use. Set MAIL_TRANSPORT=smtp and the SMTP_* settings "
+                "before running outside DEMO_MODE."
             )
 
 

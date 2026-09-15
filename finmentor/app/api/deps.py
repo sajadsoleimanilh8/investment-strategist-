@@ -276,6 +276,16 @@ def build_ai_context(
 # and calls the pipeline functions directly. These dependencies exist for the
 # browser client, and guarding a route cannot break the bot.
 
+def tokens_still_valid(user: User, claims: security.TokenClaims) -> bool:
+    """False for a token minted under a superseded `token_version`.
+
+    Bumped by a completed password reset. Without this, resetting a password
+    locks nobody out: the tokens the old password produced are signed,
+    unexpired and stateless, so they keep working for their full lifetime.
+    """
+    return claims.version == user.token_version
+
+
 def require_user(
     db: DbSession,
     authorization: Annotated[str | None, Header()] = None,
@@ -288,7 +298,7 @@ def require_user(
     """
     try:
         token = security.bearer_token(authorization)
-        user_id = security.decode_token(token, expect=security.ACCESS)
+        claims = security.decode_claims(token, expect=security.ACCESS)
     except security.TokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -296,11 +306,17 @@ def require_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = users_repo.get(db, user_id)
+    user = users_repo.get(db, claims.user_id)
     if user is None:                      # deleted while a valid token was live
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="token is not valid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not tokens_still_valid(user, claims):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="this session ended when the password was changed",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user

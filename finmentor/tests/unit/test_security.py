@@ -91,7 +91,7 @@ def test_the_subject_is_a_string_in_the_payload():
 
 
 def test_an_expired_token_raises():
-    expired = security._encode(1, security.ACCESS, timedelta(seconds=-10))
+    expired = security._encode(1, security.ACCESS, timedelta(seconds=-10), 0)
 
     with pytest.raises(security.TokenError, match="expired"):
         security.decode_token(expired)

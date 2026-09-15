@@ -270,7 +270,8 @@ def test_no_route_answers_without_a_token(raw_client, method, path):
 
 OPEN = [("POST", "/api/auth/signup"), ("POST", "/api/auth/login"),
         ("POST", "/api/auth/refresh"), ("POST", "/api/auth/logout"),
-        ("GET", "/healthz"), ("GET", "/api/market/public/BTC")]
+        ("GET", "/healthz"), ("GET", "/api/market/public/BTC"),
+        ("POST", "/api/auth/forgot-password"), ("POST", "/api/auth/reset-password")]
 
 
 #: Every path that answers without a token, as a path template. The list above
@@ -282,6 +283,10 @@ PUBLIC_PATHS = {
     "/api/auth/login",
     "/api/auth/refresh",
     "/api/auth/logout",
+    # Forgotten passwords: both are reached by someone who cannot sign in, so
+    # neither can be behind a token. Both are rate limited per address.
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
     # The live-price WebSocket and the series that seeds its sparkline. A
     # current price is not personal data; both are capped, origin-checked or
     # cache-only, and neither can reach another user's rows.
