@@ -5,3 +5,4 @@ from app.models.goal import FinancialGoal  # noqa: F401
 from app.models.market import MarketAsset, MarketSnapshot, WatchlistItem  # noqa: F401
 from app.models.simulation import Simulation, ChatSession, EducationProgress  # noqa: F401
 from app.models.auth import PasswordReset  # noqa: F401
+from app.models.identity import UserIdentity  # noqa: F401

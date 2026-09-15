@@ -2,6 +2,7 @@ import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { Field } from "../components/Field";
+import { ProviderSignIn } from "../components/ProviderSignIn";
 import { messageFor } from "../components/AsyncBoundary";
 import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
@@ -43,6 +44,9 @@ export function Signup() {
       <Link to="/" className="auth__mark">FinMentor</Link>
       <section className="auth__card">
         <h2>Create an account</h2>
+        {/* Signing up with a provider and signing in with one are the same
+            request; the API creates the account if there is not one yet. */}
+        <ProviderSignIn next="/onboarding" />
         <form onSubmit={submit}>
           <Field label="Email" type="email" value={email} autoComplete="email" required
                  onChange={(e) => setEmail(e.target.value)} />

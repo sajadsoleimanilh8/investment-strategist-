@@ -71,12 +71,13 @@ afterEach(() => {
 });
 
 describe("connecting", () => {
-  it("derives the socket URL from the API base", () => {
+  it("derives the socket URL from the page's own origin", () => {
     renderHook(() => useLiveMarket());
 
-    // http becomes ws, which is what makes a one-origin deploy need no
-    // configuration of its own.
-    expect(sockets[0].url).toBe("ws://localhost:8000/api/market/live");
+    // With no VITE_API_BASE_URL the API is this origin (the dev proxy in
+    // development, FastAPI serving the SPA in production), and http becomes
+    // ws. jsdom serves the app from localhost:5173.
+    expect(sockets[0].url).toBe("ws://localhost:5173/api/market/live");
   });
 
   it("reports live only once the server has said so", () => {

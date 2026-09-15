@@ -544,6 +544,57 @@ ul.choices button { width: 100%; text-align: start; }
 .auth__card h2 { margin-block-start: 0; }
 .auth__card form { max-width: none; }
 .auth__alt { color: var(--color-muted); font-size: 0.875rem; margin: 0; }
+/* ---- third-party sign-in -----------------------------------------------
+   Above the email form, because someone who has a provider account wants one
+   press, and someone who does not is going to read the form anyway. */
+.providers { margin-block-end: var(--space-4); }
+.providers__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+/* A pill, like every other control in this system. The landing page's button
+   styles live in landing.css and are scoped to `.landing`, so they are not
+   available here — and a control this important should not depend on which
+   stylesheet a page happens to import. */
+a.provider-button {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+  text-decoration: none;
+  transition: border-color var(--motion-quick) var(--ease-out),
+              transform var(--motion-instant) var(--ease-out);
+}
+a.provider-button:hover { border-color: var(--color-mist); text-decoration: none; }
+a.provider-button:active { transform: translateY(1px); }
+
+/* A labelled separator. A bare rule leaves the reader to work out what the
+   two halves are; four words do not. */
+.providers__or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+.providers__or::before,
+.providers__or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
 /* A secondary way out, inside the card and under the form it belongs to. */
 .auth__aside { font-size: 0.875rem; margin: var(--space-3) 0 0; }
 

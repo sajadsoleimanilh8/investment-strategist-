@@ -10,6 +10,7 @@ from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from app.models.auth import PasswordReset
+    from app.models.identity import UserIdentity
     from app.models.finance import ExpenseRecord, FinancialProfile, IncomeRecord
     from app.models.goal import FinancialGoal
     from app.models.market import WatchlistItem
@@ -28,6 +29,12 @@ class User(Base, TimestampMixin):
         # Two ways in, and a row must have at least one of them. A Telegram
         # user never authenticates; a web user has no telegram id. The same row
         # can hold both once the two identities are linked.
+        # Three ways in now, and a row must have at least one. A Telegram user
+        # never authenticates; a web user has an email; someone who arrived
+        # through Google has an email too, because every provider this app
+        # supports gives us one. The constraint stays as it was for that
+        # reason — it is not loosened to accommodate providers, it already
+        # covers them.
         CheckConstraint(
             "telegram_id IS NOT NULL OR email IS NOT NULL",
             name="ck_users_has_an_identity",
@@ -74,6 +81,9 @@ class User(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     password_resets: Mapped[list[PasswordReset]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    identities: Mapped[list[UserIdentity]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     chat_sessions: Mapped[list[ChatSession]] = relationship(

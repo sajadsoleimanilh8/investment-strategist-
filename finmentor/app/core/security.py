@@ -21,6 +21,7 @@ Token design:
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import secrets
 from dataclasses import dataclass
@@ -36,6 +37,13 @@ from app.core.config import settings
 ALGORITHM = "HS256"
 ACCESS = "access"
 REFRESH = "refresh"
+#: Two more short-lived kinds, both for third-party sign-in. `state` is the
+#: round trip to a provider; `handoff` is the moment between the provider
+#: sending the browser back and the frontend asking for its tokens. Both carry
+#: `typ` and are checked for it, for the same reason access and refresh are:
+#: a token accepted in the wrong place is a longer session than intended.
+STATE = "oauth_state"
+HANDOFF = "oauth_handoff"
 
 #: argon2id at the library's defaults — a deliberate choice over bcrypt, which
 #: silently truncates at 72 bytes and is cheaper to attack on a GPU.
@@ -185,3 +193,49 @@ def bearer_token(authorization: str | None) -> str:
 
 def rate_limit_key(user_id: str, bucket: str) -> str:
     return f"rl:{bucket}:{user_id}"
+
+
+# --- short-lived signed payloads ----------------------------------------
+
+def sign_payload(payload: dict[str, Any], *, kind: str, lifetime: timedelta) -> str:
+    """A signed, expiring blob for a round trip through someone else's site.
+
+    Used for the OAuth `state` parameter, which has to survive a redirect to a
+    provider and back without this app storing anything. Signing it is what
+    makes that safe: a state the server did not mint will not verify, which is
+    the whole defence against a callback nobody here started.
+    """
+    now = datetime.now(timezone.utc)
+    body = dict(payload)
+    body.update({
+        "typ": kind,
+        "iat": int(now.timestamp()),
+        "exp": int((now + lifetime).timestamp()),
+    })
+    return jwt.encode(body, settings.jwt_secret, algorithm=ALGORITHM)
+
+
+def read_payload(token: str, *, kind: str) -> dict[str, Any]:
+    """The payload back, or `TokenError`."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError as exc:
+        raise TokenError("that sign-in attempt has expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise TokenError("that sign-in attempt is not valid") from exc
+    if payload.get("typ") != kind:
+        raise TokenError(f"expected a {kind} token")
+    return payload
+
+
+def pkce_pair() -> tuple[str, str]:
+    """A PKCE verifier and its S256 challenge.
+
+    Proof that the app finishing the flow is the one that started it. Without
+    it, an authorization code intercepted on the way back (a shared machine's
+    history, a leaky redirect) can be spent by whoever holds it.
+    """
+    verifier = secrets.token_urlsafe(48)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return verifier, challenge

@@ -15,6 +15,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { Ask } from "./pages/Ask";
 import { Dashboard } from "./pages/Dashboard";
 import { Goals } from "./pages/Goals";
+import { AuthCallback } from "./pages/AuthCallback";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Landing } from "./pages/Landing";
 import { Learn } from "./pages/Learn";
@@ -38,6 +39,9 @@ export const router = createBrowserRouter([
   // reason: everyone who reaches them is signed out by definition.
   { path: "/forgot-password", element: <ForgotPassword /> },
   { path: "/reset-password", element: <ResetPassword /> },
+  // Where a provider sign-in lands. Outside the layout for the same reason:
+  // whoever is here has no session yet.
+  { path: "/auth/callback", element: <AuthCallback /> },
   {
     // A pathless layout route: it contributes no URL segment of its own, so
     // every child keeps its existing absolute path (no "/app/..." migration).

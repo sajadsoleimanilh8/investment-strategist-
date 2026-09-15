@@ -18,20 +18,20 @@
 /**
  * Where the API is.
  *
- * `VITE_API_BASE_URL` wins when it is set, which is how a split-origin build
- * (nginx serving the SPA, the API on another host) is configured. Without it
- * the fallback differs by build, because the two cases are genuinely
- * different: in dev the page is on Vite's port and the API is on another, so
- * it has to be named; in a production build the SPA is served from the API's
- * own origin, and hard-coding localhost there is a page that only works on
- * the machine it was built on.
+ * Empty means "this origin", which is the normal case in both directions: in
+ * production FastAPI serves the built SPA, and in development the Vite proxy
+ * forwards `/api` to it (see vite.config.ts). One origin is not only simpler
+ * — it is what the OAuth handoff cookie requires, since `SameSite=Lax` is not
+ * sent on a cross-site request.
+ *
+ * `VITE_API_BASE_URL` opts out, for a genuinely split deployment or for the
+ * Playwright suite, which points the SPA straight at its own API port.
  *
  * Exported because the live-market WebSocket has to resolve to the same
  * place. Two bases that can disagree is a bug waiting for a deploy.
  */
 export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ??
-  (import.meta.env.DEV ? "http://localhost:8000" : window.location.origin);
+  import.meta.env.VITE_API_BASE_URL ?? "";
 
 const BASE_URL = API_BASE_URL;
 const REFRESH_KEY = "finmentor.refresh_token";

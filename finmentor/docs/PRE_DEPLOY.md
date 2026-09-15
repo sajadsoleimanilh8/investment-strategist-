@@ -74,6 +74,55 @@ upstream field rename would pass every test here and fail in production.
       stopped, to `deterministic`. Both failure paths are unit-tested against a
       fake; neither has been run against a real provider.
 
+## 2b. Sign-in, if you are enabling it
+
+Password reset and third-party sign-in both work offline in a demo and both
+need real credentials in production. Neither has ever spoken to a live
+provider from this machine.
+
+- [ ] **A mail transport.** `MAIL_TRANSPORT=smtp` plus the `SMTP_*` settings.
+      The API refuses to start outside DEMO_MODE on the console transport,
+      because that one writes reset links into the log, and a link in a log is
+      a credential anybody with log access can spend. Send yourself one and
+      click it.
+
+- [ ] **`WEB_BASE_URL` is the SPA, not the API.** It is what a reset link
+      points at. Get it wrong and every link in every reset email opens an
+      endpoint instead of a page.
+
+- [ ] **Google.** A Web application client in Google Cloud Console, with
+      `{OAUTH_REDIRECT_BASE}/api/auth/oauth/google/callback` in the authorised
+      redirect URIs. Exactly, including the scheme: Google matches the string.
+
+- [ ] **GitHub.** An OAuth App, same callback path with `github`. GitHub
+      allows only one callback URL per app, so staging and production need two
+      apps.
+
+- [ ] **Apple**, which is the expensive one. It needs a paid Apple Developer
+      account, a Services ID (not the app id) as `APPLE_CLIENT_ID`, a domain
+      verified with Apple, and a `.p8` key whose contents go in
+      `APPLE_PRIVATE_KEY`. Apple will not accept a localhost redirect at all,
+      so this cannot be tested before there is a real domain with HTTPS.
+
+- [ ] **The exchange is same-origin.** The handoff cookie is `SameSite=Lax`,
+      which the browser does not send on a cross-site request, so the SPA and
+      the API must share an origin. That is the default deployment (FastAPI
+      serving the built SPA) and what the Vite dev proxy reproduces. A split
+      deployment needs `SameSite=None; Secure` and HTTPS on both, which is a
+      code change, not a setting.
+
+- [ ] **The buttons need each provider's mark.** They currently read
+      "Continue with Google" in plain text. Google and Apple both publish
+      branding rules for their sign-in buttons that a text label does not
+      meet, and Apple enforces theirs at review. Ship their official SVGs as
+      static assets (they are local files, so `DEMO_MODE` stays offline).
+
+- [ ] **Walk one provider end to end on staging**, then sign in a second time
+      with the same provider and confirm it lands in the same account rather
+      than making a new one.
+
+---
+
 ## 3. The stack
 
 - [ ] `docker compose up -d` on the target host; all four containers healthy.

@@ -287,6 +287,14 @@ PUBLIC_PATHS = {
     # neither can be behind a token. Both are rate limited per address.
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
+    # Third-party sign-in. Everyone who reaches these is signed out by
+    # definition, and the callback is reached by a redirect from a provider
+    # rather than by this app's own client. `exchange` is guarded by the
+    # handoff cookie instead of a bearer token.
+    "/api/auth/oauth/providers",
+    "/api/auth/oauth/{provider_name}/start",
+    "/api/auth/oauth/{provider_name}/callback",
+    "/api/auth/oauth/exchange",
     # The live-price WebSocket and the series that seeds its sparkline. A
     # current price is not personal data; both are capped, origin-checked or
     # cache-only, and neither can reach another user's rows.

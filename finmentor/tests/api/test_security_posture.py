@@ -48,20 +48,44 @@ def test_the_demo_stack_points_cors_at_its_own_web_container():
 
 # --- no cookies ----------------------------------------------------------
 
-def test_the_app_sets_no_cookies_at_all():
-    """Auth is a bearer token held in memory by the client. Nothing sets a
-    cookie, which is why there are no httponly/secure/samesite flags to get
-    wrong — and this is what notices if that changes."""
-    setters = [
+#: The one place in the app allowed to set a cookie, and why.
+#:
+#: Auth is otherwise a bearer token held in memory by the client, which is
+#: what keeps this codebase free of cookie flags to get wrong. Third-party
+#: sign-in needs one exception: the provider returns the browser by redirect,
+#: and the alternative to a cookie is putting a credential in the URL the
+#: browser is sent to, where it lands in history, referrers and access logs.
+COOKIE_SETTERS = {"api/routes/oauth.py"}
+
+
+def test_only_the_oauth_handoff_sets_a_cookie():
+    setters = {
         path.relative_to(APP_DIR).as_posix()
         for path in APP_DIR.rglob("*.py")
         if "set_cookie" in path.read_text(encoding="utf-8")
-    ]
+    }
 
-    assert setters == [], (
-        f"{setters} set a cookie. If that is deliberate it needs httponly, "
-        "secure and samesite, and this test needs to say so."
+    assert setters == COOKIE_SETTERS, (
+        f"{setters ^ COOKIE_SETTERS} changed which files set cookies. A new one "
+        "needs httponly, secure and samesite, and this test needs to say so."
     )
+
+
+def test_the_handoff_cookie_carries_every_flag():
+    """It holds a credential for sixty seconds. Missing any one of these turns
+    it into a credential the page's own scripts can read, that rides along on
+    cross-site requests, or that travels in clear text."""
+    source = (APP_DIR / "api" / "routes" / "oauth.py").read_text(encoding="utf-8")
+    # To the closing paren at the call's own indentation, not the first one:
+    # `max_age=int(...)` has parens of its own.
+    call = source.split("response.set_cookie(")[1]
+    call = call[: call.index("    )")]
+
+    assert "httponly=True" in call, "the page must not be able to read it"
+    assert 'samesite="lax"' in call, "it must not ride along on cross-site requests"
+    assert "secure=" in call, "it must not travel in clear text over https"
+    assert 'path="/api/auth/oauth"' in call, "it is for the exchange route only"
+    assert "max_age=" in call, "a handoff that does not expire is a session"
 
 
 # --- the signing key -----------------------------------------------------

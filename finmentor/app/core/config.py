@@ -47,6 +47,25 @@ class Settings(BaseSettings):
     #: inbox, and an hour is long enough to read an email.
     password_reset_ttl_minutes: int = 60
 
+    # third-party sign-in --------------------------------------------------
+    #: Absent credentials mean the provider is absent from the sign-in page,
+    #: not shown and broken. See app/oauth/registry.py.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    #: Apple's client id is the Services ID, not the app id, and its secret is
+    #: a JWT signed from the .p8 key rather than a stored string.
+    apple_client_id: str = ""
+    apple_team_id: str = ""
+    apple_key_id: str = ""
+    #: The contents of the .p8, newlines and all. In an env var they usually
+    #: arrive escaped, so the provider unescapes before signing.
+    apple_private_key: str = ""
+    #: Where providers send the browser back. Must match what is registered
+    #: with each of them, exactly, including the scheme.
+    oauth_redirect_base: str = "http://localhost:8000"
+
     # presentation
     currency_symbol: str = "$"
 

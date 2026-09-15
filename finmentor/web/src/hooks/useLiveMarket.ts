@@ -43,9 +43,13 @@ const RECONNECT_BASE_MS = 1500;
 const RECONNECT_MAX_MS = 20_000;
 
 function wsUrl(): string {
-  // Same base as every other request (see API_BASE_URL) — http becomes ws,
-  // https becomes wss, and a one-origin deploy needs no configuration.
-  return `${API_BASE_URL.replace(/^http/, "ws")}/api/market/live`;
+  // Same base as every other request (see API_BASE_URL): http becomes ws and
+  // https becomes wss. An empty base means this origin, and the WebSocket
+  // constructor wants an absolute URL, so that case is spelled out rather
+  // than left to the browser to resolve.
+  const base = API_BASE_URL
+    || `${window.location.protocol === "https:" ? "https:" : "http:"}//${window.location.host}`;
+  return `${base.replace(/^http/, "ws")}/api/market/live`;
 }
 
 export function useLiveMarket(symbols: readonly string[] = []) {
