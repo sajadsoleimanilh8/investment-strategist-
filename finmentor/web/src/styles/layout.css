@@ -187,6 +187,19 @@ fieldset { margin-block: var(--space-3); padding: var(--space-3); }
 
 /* Wide tables scroll inside themselves rather than scrolling the page. */
 .table-scroll { overflow-x: auto; }
+/* Present for a screen reader, absent for everyone else. Used where a column
+   of controls needs a header that would be noise if it were drawn. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* A caption is a label for the table, so it starts where the table starts. */
 caption { text-align: start; }
 /* "20.0 / 20" is one value and has to stay on one line; wrapped, it reads as
@@ -452,6 +465,13 @@ ul.rows > li:last-child { border-block-end: 0; }
 }
 .rows__head strong { color: var(--color-text); font-weight: 500; }
 .rows__figure { color: var(--color-text); white-space: nowrap; }
+/* Where a button would be when there is nothing to press. Same box, so the
+   row does not shift sideways as its state changes. */
+.rows__state {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
 .rows__detail {
   display: block;
   margin-block-start: var(--space-1);

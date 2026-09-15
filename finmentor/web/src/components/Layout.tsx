@@ -13,6 +13,16 @@ const LINKS = [
   ["/profile", "Profile"],
 ] as const;
 
+/** The two pages that are not prose. The dashboard is a grid of independent
+ * panels (`cols`); the market page is one seven-column table, which needs the
+ * width but not a second column beside it. Everything else keeps the 68ch
+ * reading measure, because a form or a page of explanations is read rather
+ * than scanned. */
+const WIDTH_CLASS: Record<string, string> = {
+  "/dashboard": "wide cols",
+  "/market": "wide",
+};
+
 export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -43,17 +53,12 @@ export function Layout() {
         )}
       </header>
 
-      {/* `wide cols` for the dashboard only: it is the one page that is a
-          grid of independent panels rather than a column of prose, and the
-          68ch reading measure leaves half a desktop screen empty under it.
-          Everything else keeps the measure, because a form or a list of
-          explanations is read, not scanned. */}
       {/* Keyed on the path so the entrance replays on every navigation rather
           than only the first mount. Every page is already a list of top-level
           `section`s, so staggering main's children *is* the route transition —
           the page resolves card by card instead of the whole screen blinking
           over at once, and a one-section page still gets a clean fade. */}
-      <main key={pathname} className={`stagger${pathname === "/dashboard" ? " wide cols" : ""}`}>
+      <main key={pathname} className={`stagger ${WIDTH_CLASS[pathname] ?? ""}`.trimEnd()}>
         <Outlet />
       </main>
 

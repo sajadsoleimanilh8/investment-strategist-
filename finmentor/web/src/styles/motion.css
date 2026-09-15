@@ -111,6 +111,25 @@
    a spatial relationship between two screens, and Dashboard is not to the
    left of Goals. */
 
+/* A result that was not on the page before the press. The entrance is what
+   ties the answer to the action that asked for it: on Simulate the form is at
+   the top of a section and the table lands below it, far enough down that an
+   instant appearance can be missed entirely. It plays once, on mount, because
+   that is the only moment it is telling the truth. */
+.result {
+  animation: enter var(--motion-moderate) var(--ease-out) backwards;
+}
+
+/* A table row that was not there a moment ago enters rather than appearing.
+   This is feedback, not decoration: adding a symbol to the watchlist happens
+   in a different part of the page from where the result lands, and the
+   entrance is what connects the press to the row. React reuses the DOM node
+   for a key it already rendered, so a refetch that returns the same rows
+   animates nothing. */
+tbody > tr {
+  animation: enter var(--motion-quick) var(--ease-out) backwards;
+}
+
 /* ---- the shimmer --------------------------------------------------------
    Anything still waiting breathes. This hangs off `aria-busy`, which the app
    already sets, so a pending surface is styled by the same attribute that

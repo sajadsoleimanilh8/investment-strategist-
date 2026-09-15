@@ -16,37 +16,88 @@ import { money } from "../components/Money";
 import { useAuth } from "../auth/AuthContext";
 import type { DecisionOut, ScenarioComparison, SimulationOut } from "../api/types";
 
-function Sides({ current, scenario }: { current: ScenarioComparison; scenario: ScenarioComparison }) {
-  const rows: [string, string, string][] = [
-    ["Saving each month", money(current.monthly_savings), money(scenario.monthly_savings)],
-    ["Projected savings", money(current.projected_savings_end), money(scenario.projected_savings_end)],
-    ["Emergency cover", `${current.emergency_months.toFixed(1)} months`,
-      `${scenario.emergency_months.toFixed(1)} months`],
-    ["Health score", current.health_score.toFixed(1), scenario.health_score.toFixed(1)],
-  ];
-  if (current.estimated_goal_date || scenario.estimated_goal_date) {
-    rows.push(["Goal date", current.estimated_goal_date ?? "no date yet",
-      scenario.estimated_goal_date ?? "no date yet"]);
-  }
+/**
+ * Before, after, and the change between them.
+ *
+ * The change column is the engine's `deltas`, not a subtraction done here.
+ * That distinction is the whole architectural rule in miniature: the two
+ * outer columns are figures the engine sent, and the middle one would be a
+ * figure this component invented if it were computed in the browser. The
+ * engine already sends it, keyed by the same field names, so there is nothing
+ * to invent.
+ */
+const ROWS = [
+  { key: "monthly_savings", label: "Saving each month", format: money },
+  { key: "projected_savings_end", label: "Projected savings", format: money },
+  {
+    key: "goal_completion_pct",
+    label: "Goal progress",
+    format: (value: number) => `${value.toFixed(1)}%`,
+  },
+  {
+    key: "emergency_months",
+    label: "Emergency cover",
+    format: (value: number) => `${value.toFixed(1)} months`,
+  },
+  { key: "health_score", label: "Health score", format: (value: number) => value.toFixed(1) },
+] as const;
 
+function Sides({
+  current, scenario, deltas,
+}: {
+  current: ScenarioComparison;
+  scenario: ScenarioComparison;
+  deltas: Record<string, number>;
+}) {
   return (
-    <div className="table-scroll">
+    <div className="table-scroll result">
       <table>
         <thead>
           <tr>
-            <th scope="col">&nbsp;</th>
+            <th scope="col"><span className="visually-hidden">Measure</span></th>
             <th scope="col" className="numeric">Now</th>
             <th scope="col" className="numeric">If you do this</th>
+            <th scope="col" className="numeric">Change</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(([label, before, after]) => (
-            <tr key={label}>
-              <th scope="row">{label}</th>
-              <td className="numeric">{before}</td>
-              <td className="numeric">{after}</td>
+          {ROWS.map(({ key, label, format }) => {
+            const before = current[key];
+            const after = scenario[key];
+            // A goal that does not exist has no percentage on either side, and
+            // a zero there would read as "no change" rather than "no goal".
+            if (before === null || after === null) return null;
+            const delta = deltas[key];
+
+            return (
+              <tr key={key}>
+                <th scope="row">{label}</th>
+                <td className="numeric">{format(before)}</td>
+                <td className="numeric">{format(after)}</td>
+                <td
+                  className={`numeric ${
+                    delta === undefined || delta === 0
+                      ? ""
+                      : delta > 0 ? "delta-positive" : "delta-negative"
+                  }`}
+                >
+                  {delta === undefined
+                    ? ""
+                    : `${delta > 0 ? "+" : ""}${format(delta)}`}
+                </td>
+              </tr>
+            );
+          })}
+          {(current.estimated_goal_date || scenario.estimated_goal_date) && (
+            <tr>
+              <th scope="row">Goal date</th>
+              <td className="numeric">{current.estimated_goal_date ?? "no date yet"}</td>
+              <td className="numeric">{scenario.estimated_goal_date ?? "no date yet"}</td>
+              {/* A date has no delta: the engine sends none, and "three months
+                  earlier" is arithmetic this file is not allowed to do. */}
+              <td />
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
     </div>
@@ -57,28 +108,37 @@ export function Simulate() {
   const { user } = useAuth();
   const [savingsDelta, setSavingsDelta] = useState("");
   const [price, setPrice] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // One message per form, not one for the page. Three simulators share this
+  // screen, and a single error slot at the bottom put the reason for a failed
+  // submission three sections away from the field that caused it.
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const fail = (form: string) => (caught: unknown) =>
+    setErrors((prev) => ({ ...prev, [form]: messageFor(caught) }));
+  const clear = (form: string) => setErrors((prev) => ({ ...prev, [form]: null }));
 
   const whatIf = useMutation<SimulationOut>({
     mutationFn: () => runWhatIf(user!.id, { monthly_savings_delta: Number(savingsDelta) }),
-    onError: (caught) => setError(messageFor(caught)),
+    onError: fail("whatIf"),
   });
 
   const decision = useMutation<DecisionOut>({
     mutationFn: () => runDecision(user!.id, Number(price)),
-    onError: (caught) => setError(messageFor(caught)),
+    onError: fail("decision"),
   });
 
   const timeMachine = useMutation<ScenarioComparison[]>({
     mutationFn: () => runTimeMachine(user!.id),
-    onError: (caught) => setError(messageFor(caught)),
+    onError: fail("timeMachine"),
   });
 
   function submitWhatIf(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    clear("whatIf");
     if (!Number(savingsDelta)) {
-      setError("Enter how much more (or less) you would save each month.");
+      setErrors((prev) => ({
+        ...prev,
+        whatIf: "Enter how much more (or less) you would save each month.",
+      }));
       return;
     }
     whatIf.mutate();
@@ -86,9 +146,9 @@ export function Simulate() {
 
   function submitDecision(event: FormEvent) {
     event.preventDefault();
-    setError(null);
+    clear("decision");
     if (Number(price) <= 0) {
-      setError("Enter what it costs.");
+      setErrors((prev) => ({ ...prev, decision: "Enter what it costs." }));
       return;
     }
     decision.mutate();
@@ -112,10 +172,15 @@ export function Simulate() {
             </button>
           </div>
         </form>
+        <FormError message={errors.whatIf} />
 
         {whatIf.data && (
           <>
-            <Sides current={whatIf.data.current} scenario={whatIf.data.scenario} />
+            <Sides
+              current={whatIf.data.current}
+              scenario={whatIf.data.scenario}
+              deltas={whatIf.data.deltas}
+            />
             <p className="disclaimer">{whatIf.data.disclaimer}</p>
           </>
         )}
@@ -136,14 +201,15 @@ export function Simulate() {
             </button>
           </div>
         </form>
+        <FormError message={errors.decision} />
 
         {decision.data && (
           <>
-            <div className="table-scroll">
+            <div className="table-scroll result">
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">&nbsp;</th>
+                    <th scope="col"><span className="visually-hidden">Measure</span></th>
                     <th scope="col" className="numeric">Before</th>
                     <th scope="col" className="numeric">After</th>
                   </tr>
@@ -195,8 +261,10 @@ export function Simulate() {
           </button>
         </div>
 
+        <FormError message={errors.timeMachine} />
+
         {timeMachine.data && (
-          <div className="table-scroll">
+          <div className="table-scroll result">
             <table>
               <thead>
                 <tr>
@@ -221,7 +289,6 @@ export function Simulate() {
         )}
       </section>
 
-      <FormError message={error} />
       <p className="disclaimer">
         These are straight-line projections from your own figures, not forecasts.
       </p>

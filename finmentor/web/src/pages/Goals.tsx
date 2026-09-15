@@ -8,6 +8,17 @@ import { FormError } from "../components/FormError";
 import { compact } from "../components/Money";
 import { useAuth } from "../auth/AuthContext";
 
+/** Priority is stored as 1-5 and weighs the goal-progress score (priority 1
+ * counts five times a priority 5). A bare digit in a table says none of that,
+ * so the two ends and the middle carry a word. */
+const PRIORITY_LABEL: Record<number, string> = {
+  1: "1 (highest)",
+  2: "2",
+  3: "3 (normal)",
+  4: "4",
+  5: "5 (lowest)",
+};
+
 export function Goals() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -86,7 +97,9 @@ export function Goals() {
                       {compact(goal.current_amount)} / {compact(goal.target_amount)}
                     </td>
                     <td>{goal.estimated_completion ?? "no date yet"}</td>
-                    <td className="numeric">{goal.priority}</td>
+                    <td className="numeric">
+                      {PRIORITY_LABEL[goal.priority] ?? goal.priority}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -130,11 +143,9 @@ export function Goals() {
               value={priority}
               onChange={(e) => setPriority(Number(e.target.value))}
             >
-              <option value={1}>1 — highest</option>
-              <option value={2}>2</option>
-              <option value={3}>3 — normal</option>
-              <option value={4}>4</option>
-              <option value={5}>5 — lowest</option>
+              {Object.entries(PRIORITY_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </p>
           <FormError message={error} />
