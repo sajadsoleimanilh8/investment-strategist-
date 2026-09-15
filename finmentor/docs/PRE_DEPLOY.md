@@ -43,6 +43,19 @@ upstream field rename would pass every test here and fail in production.
       free tier's 25-requests-per-day cap — it returns a *note*, not an error,
       and the parser must treat that as no data rather than as a price.
 
+- [ ] **CoinGecko, the live ticker.** Separate from the series call below and
+      newer, so it has never met the real API either. With `DEMO_MODE=false`
+      and `MARKET_LIVE_SOURCE=live`:
+
+      python -c "from app.market.coingecko import CoinGeckoProvider;                  print(CoinGeckoProvider().get_spot(['BTC','ETH','SOL']))"
+
+      Expect three `Spot`s with plausible USD prices and a 24h change. This is
+      `/simple/price`, and the landing page's whole claim rests on it: if the
+      shape has moved, the hub raises and the panel says "reconnecting"
+      forever rather than showing a wrong number, which is the intended
+      failure but not a good landing page. Watch the free tier's rate limit —
+      the hub polls every 20s but only while somebody is connected.
+
 - [ ] **CoinGecko.** No key needed on the free tier:
 
       python -c "from app.market.coingecko import CoinGeckoProvider; \
@@ -65,7 +78,24 @@ upstream field rename would pass every test here and fail in production.
 
 - [ ] `docker compose up -d` on the target host; all four containers healthy.
 - [ ] `alembic current` matches `alembic heads`.
-- [ ] `CORS_ORIGINS` lists the real web origin. Not `*`, not localhost.
+- [ ] `CORS_ORIGINS` lists the real web origin. Not `*`, not localhost. This
+      is load-bearing twice over: the live-price WebSocket checks `Origin`
+      against the same list, because a WebSocket upgrade never passes through
+      CORS at all. Get this wrong and either every visitor's ticker is refused,
+      or any page on the internet can open sockets against the hub.
+- [ ] **The WebSocket survives the proxy.** `wss://` through whatever
+      terminates TLS, with upgrade headers forwarded. A reverse proxy that
+      drops them leaves the landing page reconnecting on a loop with nothing
+      in the API log to explain it.
+- [ ] **`MARKET_LIVE_SOURCE` is `live` in production.** `off` is the DEMO_MODE
+      resolution and `mock` is for recorded demos; the page labels a mock feed
+      as demo data, which is correct and is not what a real deployment wants.
+- [ ] **The market cache is warm.** `GET /api/market/public/{symbol}` is
+      cache-only by design (an unauthenticated route that could reach a
+      provider is a way for anyone to spend the free-tier budget), so with a
+      cold cache the landing sparkline has nothing to draw until live ticks
+      accumulate. `ENABLE_SCHEDULER=true`, or run
+      `scripts/fetch_market_snapshots.py` once after deploy.
 - [ ] HTTPS terminates in front of the API. Tokens are bearer credentials in a
       header; over plain HTTP they are readable by anything on the path.
 - [ ] Redis is reachable. If it is not, rate limiting silently allows every

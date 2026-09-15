@@ -260,6 +260,61 @@ not break it.
       and **not shipped**: stock `llama3.2:3b` beat it. The pipeline is
       committed and repeatable.
 
+## Phase 9 — Landing, live market, and the design pass  `[~]`
+
+Phase 8 filled the token block. This phase spent it: the public landing page,
+a real live-price feed behind it, and a design pass over all thirteen routes.
+No new runtime dependency — still four, still system fonts. An earlier attempt
+at this phase added gsap, lenis, three and three Google Fonts, and all of it
+was reverted before this one started.
+
+- [x] **The landing page.** Live crypto prices as the hero, because "this is a
+      real tool" is a claim better made by a working feature than by a rendered
+      loop. No video, no scroll hijack, no pinned sections. The nav sticks and
+      changes state but never hides: the one affordance the page exists to
+      offer is "Sign up", and hiding it to buy a cleaner first screen trades
+      the page's purpose for its looks.
+- [x] **A live feed that degrades honestly.** Spot is now a provider capability
+      (`MarketDataProvider.get_spot`, `supports_spot`) rather than a second
+      HTTP path beside `app/market`. The hub picks one provider from
+      `MARKET_LIVE_SOURCE` and **never falls back to mock** — that fallback is
+      right everywhere else and wrong under a headline reading "real prices,
+      not a mockup". Three states: `live`, `mock` (labelled "Demo data"
+      everywhere it renders), and `off`, which is what DEMO_MODE resolves
+      `live` to so an offline demo says it has no connection instead of
+      reconnecting forever.
+- [x] **The socket is public but guarded.** A WebSocket upgrade does not pass
+      through CORS, so `market_live` checks `Origin` against the same list and
+      caps concurrent clients. The poll loop parks while nobody is connected,
+      so an instance with no visitors spends nothing.
+- [x] `GET /api/market/public/{symbol}` seeds the landing sparkline. Cache-only
+      and limited to the three ticker symbols.
+- [x] **The route inventory test.** `GUARDED` in `test_auth.py` was a
+      hand-maintained list, so an unguarded route would simply not appear in it
+      and nothing would fail. A test now walks the real router tree: every
+      route is guarded or named in `PUBLIC_PATHS`.
+- [x] **The design pass, thirteen routes.** The dashboard set the idiom (score
+      as a figure, `wide cols` for panel pages, the `rows` pattern, skeletons
+      shaped like the result); Market, Simulate, Goals, Learn, Ask, Profile,
+      Onboarding, Login, Signup and NotFound follow it. Motion stayed the four
+      devices in `motion.css` and nothing else, each used where it answers
+      "what just happened?".
+- [x] **Contrast and fonts, widened.** `--color-brand` carries type and is now
+      in the check; `--color-brand-deep` has the opposite assertion (nothing
+      may read on it). The no-web-font check covers `landing.css`,
+      `motion.css` and `index.html`, where the Google Fonts links actually
+      lived, instead of only the token block.
+- [x] Playwright covers the degraded feed (`e2e/landing.spec.ts`): with no
+      feed the page says so, shows no price, and carries a disclaimer that
+      describes *that* state. The live path stays a pre-deploy manual check,
+      same as every other provider in this project.
+- [ ] **Screenshots and a browser pass over the nine authenticated pages.**
+      Docker was not running for the second half of this phase, so Postgres
+      was unreachable and the Playwright suite could not start its API. The
+      landing page, the signed-out pages and the dashboard were verified in a
+      browser; Market, Simulate, Goals, Learn, Ask, Profile and Onboarding
+      have passed typecheck and the unit suite only.
+
 ### What is left at the end of the project
 
 One thing, needing a human with network access:
