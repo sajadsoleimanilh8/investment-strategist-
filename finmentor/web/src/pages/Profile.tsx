@@ -105,7 +105,10 @@ export function Profile() {
               />
             </fieldset>
 
-            <fieldset>
+            {/* Eight number fields in one column is a page of scrolling for
+                what is really one question asked eight times. Two columns on
+                anything wider than a phone. */}
+            <fieldset className="grid-2">
               <legend>Monthly spending</legend>
               {EXPENSE_CATEGORIES.map((category) => (
                 <Field
@@ -164,7 +167,7 @@ export function Profile() {
             </fieldset>
 
             <FormError message={error} />
-            {saved && <p role="status">Saved.</p>}
+            {saved && <p role="status" className="saved result">Saved.</p>}
 
             <div className="actions">
               <button type="submit" disabled={save.isPending}>

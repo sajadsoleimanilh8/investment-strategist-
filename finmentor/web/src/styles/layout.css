@@ -225,6 +225,8 @@ dl.pairs dd { margin: 0; }
 .delta-positive { color: var(--color-positive); }
 .delta-negative { color: var(--color-negative); }
 .disclaimer { color: var(--color-muted); max-width: var(--measure); }
+/* Secondary prose: a count, a caption, a line of context under a heading. */
+.muted { color: var(--color-muted); }
 
 /* ==========================================================================
    SKIN
@@ -465,6 +467,84 @@ ul.rows > li:last-child { border-block-end: 0; }
 }
 .rows__head strong { color: var(--color-text); font-weight: 500; }
 .rows__figure { color: var(--color-text); white-space: nowrap; }
+/* A row that is itself a control. No pill and no border, deliberately: the
+   pill is how a *button-shaped* control announces itself in this system, and
+   here the row already says "press me" by being a row in a list of them.
+   Adding an outline would draw a box around every line of a twelve-item list.
+   Full width so the whole row is the target, not just the words. */
+.row-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.row-button:hover { color: var(--color-accent); }
+
+/* Answers to a multiple-choice question: one per line, full width, so the
+   options form a column that can be read down rather than a paragraph of
+   buttons that reflows at every width. */
+ul.choices { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+ul.choices > li + li { margin-block-start: var(--space-2); }
+ul.choices button { width: 100%; text-align: start; }
+
+/* Two columns of fields on anything past phone width, one below it. The
+   legend spans, because it labels the whole group. */
+@media (min-width: 600px) {
+  fieldset.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--space-3);
+  }
+  fieldset.grid-2 > legend { grid-column: 1 / -1; }
+}
+
+/* Confirmation of something that worked. Positive is the delta token, used
+   here for the same meaning it always has: this went the reader's way. */
+.saved { color: var(--color-positive); }
+
+/* A row of suggestions. These are controls, so they keep the pill: unlike a
+   list row, a chip has no other affordance telling the reader it can be
+   pressed, and shape is how this system says so. */
+ul.chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+ul.chips button { font-size: 0.875rem; }
+
+/* A question and its answer. The question is the label and the answer is the
+   content, so the sizes are the other way round from a normal heading: the
+   reader already knows what they asked. */
+.qa + .qa { margin-block-start: var(--space-4); }
+.qa h3 {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.qa__answer {
+  /* The reply is plain text with real newlines in it, not markup. */
+  white-space: pre-wrap;
+  color: var(--color-mist);
+  max-width: var(--measure);
+}
+/* Which tier answered. Quiet, but never hidden: a deterministic reply is a
+   different kind of answer and the reader is entitled to know which they got. */
+.qa__source { color: var(--color-muted); font-size: 0.8125rem; }
+
 /* Where a button would be when there is nothing to press. Same box, so the
    row does not shift sideways as its state changes. */
 .rows__state {

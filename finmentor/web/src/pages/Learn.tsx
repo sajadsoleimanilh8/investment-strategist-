@@ -46,17 +46,26 @@ export function Learn() {
       <section>
         <h2>Learn</h2>
         <AsyncBoundary isLoading={topics.isLoading} error={topics.error}>
-          <p>
+          <p className="muted">
             {topics.data?.completed_count ?? 0} of {topics.data?.items.length ?? 0} done.
           </p>
-          <ul>
+          <ul className="rows">
             {topics.data?.items.map((item) => (
               <li key={item.key}>
-                <button type="button" onClick={() => open(item.key)}>
-                  {item.title}
+                {/* The whole title is the control, and the state sits at the
+                    other end of the row. One word, not a tick and a separator:
+                    a glyph has to be decoded, and "passed" does not. */}
+                <button
+                  type="button"
+                  className="row-button"
+                  aria-expanded={openKey === item.key}
+                  onClick={() => open(item.key)}
+                >
+                  <span>{item.title}</span>
+                  <span className="rows__state">
+                    {item.quiz_score === 100 ? "passed" : item.completed ? "read" : ""}
+                  </span>
                 </button>
-                {item.completed && <span> ✓ read</span>}
-                {item.quiz_score === 100 && <span> · got it right</span>}
               </li>
             ))}
           </ul>
@@ -67,7 +76,7 @@ export function Learn() {
         <section>
           <AsyncBoundary isLoading={topic.isLoading} error={topic.error}>
             {topic.data && (
-              <article>
+              <article className="result">
                 <h3>{topic.data.title}</h3>
                 <p>{topic.data.explanation}</p>
 
@@ -79,7 +88,7 @@ export function Learn() {
 
                 <h4>{topic.data.quiz.question}</h4>
                 {result === null ? (
-                  <ul>
+                  <ul className="choices">
                     {topic.data.quiz.options.map((option, index) => (
                       <li key={option}>
                         <button
@@ -93,7 +102,7 @@ export function Learn() {
                     ))}
                   </ul>
                 ) : (
-                  <div role="status">
+                  <div role="status" className="result">
                     <p>
                       <strong>{result.correct ? "Correct." : "Not quite."}</strong>{" "}
                       The answer is: {topic.data.quiz.options[result.correct_idx]}

@@ -19,7 +19,7 @@ import type { AskResponse } from "../api/types";
 const SOURCE_LABELS: Record<string, string> = {
   local: "answered by the local model",
   hybrid: "answered by two models, merged",
-  deterministic: "the model was unavailable — these are your verified figures",
+  deterministic: "the model was unavailable, so these are your verified figures",
 };
 
 const SUGGESTIONS = [
@@ -84,7 +84,7 @@ export function Ask() {
 
         <details>
           <summary>Things you can ask</summary>
-          <ul>
+          <ul className="chips">
             {SUGGESTIONS.map((suggestion) => (
               <li key={suggestion}>
                 <button type="button" onClick={() => setQuestion(suggestion)}>
@@ -100,14 +100,12 @@ export function Ask() {
         <section>
           <h2>This session</h2>
           {answers.map((entry, index) => (
-            <article key={index}>
+            <article key={index} className="qa result">
               <h3>{entry.question}</h3>
               {/* The reply is plain text with newlines, not markup. */}
-              <p style={{ whiteSpace: "pre-wrap" }}>{entry.response.text}</p>
-              <p className="disclaimer">
-                <small>
-                  {SOURCE_LABELS[entry.response.source] ?? entry.response.source}
-                </small>
+              <p className="qa__answer">{entry.response.text}</p>
+              <p className="qa__source">
+                {SOURCE_LABELS[entry.response.source] ?? entry.response.source}
               </p>
             </article>
           ))}
@@ -122,12 +120,11 @@ export function Ask() {
           isEmpty={history.data?.length === 0}
           emptyMessage="Nothing yet."
         >
-          <ul>
+          <ul className="rows">
             {history.data?.slice(-10).reverse().map((turn, index) => (
               <li key={index}>
-                <strong>{turn.question}</strong>
-                <br />
-                {turn.answer}
+                <span className="rows__head"><strong>{turn.question}</strong></span>
+                <span className="rows__detail">{turn.answer}</span>
               </li>
             ))}
           </ul>
