@@ -50,6 +50,12 @@
 
   --stagger-step: 45ms;      /* between siblings in one entrance */
 
+  /* The opening of the landing page, and only there. Slower than anything in
+     the app, because this is the one moment a reader is watching rather than
+     working: 900ms reads as deliberate where 280ms reads as a refresh. */
+  --motion-cinema: 900ms;
+  --cinema-step: 120ms;      /* between lines of the opening statement */
+
   /* Decelerating curves only. Things arrive and settle; nothing in a finance
      app should accelerate away from the reader. */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -130,6 +136,94 @@ tbody > tr {
   animation: enter var(--motion-quick) var(--ease-out) backwards;
 }
 
+/* ---- the opening ---------------------------------------------------------
+   Two devices, both on the public page only.
+
+   The first is the statement resolving line by line. Each line rises 14px and
+   fades over 900ms, 120ms apart, which is slow enough to read as composition
+   rather than as a page still loading. It plays once, on load, and then the
+   page behaves exactly as it did before — nothing here keeps moving, and
+   nothing here is on the path between the reader and the sign-up button.
+
+   The second is scroll-driven, and it is the reason this can be cinematic
+   without a library: `animation-timeline: view()` ties an animation to an
+   element's own progress through the viewport, natively, with no scroll
+   listener and no hijack. The scrollbar stays the reader's. Browsers without
+   it (Safari and Firefox at time of writing) keep the IntersectionObserver
+   reveal underneath, which is the same motion with a switch instead of a
+   dial — so this is an enhancement, never a requirement. */
+
+.cinema-line {
+  display: inline-block;
+  animation: cinemaLine var(--motion-cinema) var(--ease-out-soft) backwards;
+  animation-delay: calc(var(--cinema-index, 0) * var(--cinema-step));
+}
+
+@keyframes cinemaLine {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* A block-level line (the subtext, the button row) must not become an
+   inline-block or it stops filling its column. */
+.landing-intro p.cinema-line,
+.landing-intro div.cinema-line { display: block; }
+
+@supports (animation-timeline: view()) {
+  /* Sections resolve *as they arrive* rather than snapping in at a threshold.
+     `view(auto 15%)` starts the animation when the element is 15% into the
+     viewport and finishes it as it settles, so the motion is tied to the
+     reader's own scroll speed — a slow scroll gets a slow reveal.
+
+     `both` holds the end state after the range, so nothing fades back out on
+     the way past, and `forwards`-style flicker cannot happen. */
+  .landing-reveal {
+    opacity: 1;                          /* the observer's job is done here */
+    transform: none;
+    animation: cinemaArrive linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 30%;
+  }
+
+  /* The market panel is the page's centrepiece, so it gets the one piece of
+     depth on the page: it settles from slightly back rather than only up.
+     Scale, not width or height — this composites and never reflows. */
+  .landing-market {
+    animation: cinemaSettle linear both;
+    animation-timeline: view();
+    animation-range: entry 5% cover 35%;
+  }
+}
+
+@keyframes cinemaArrive {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes cinemaSettle {
+  from { opacity: 0; transform: translateY(36px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The panel's own contents resolve in order once it has arrived: label,
+   headline, status, switcher, figure. Five steps at 90ms is under half a
+   second in total — composition, not a queue the reader waits in.
+
+   What is deliberately *not* here is a count-up on the price. The dashboard
+   score counts because it is a derived figure and lands exactly; a market
+   price animating from zero would draw a sequence of prices that were never
+   real, on the one panel whose whole claim is that the number is. */
+@supports (animation-timeline: view()) {
+  .landing-market > * {
+    animation: cinemaLine var(--motion-slow) var(--ease-out-soft) backwards;
+    animation-delay: calc(var(--cinema-step) + var(--cinema-index, 0) * 90ms);
+  }
+  .landing-market > *:nth-child(1) { --cinema-index: 0; }
+  .landing-market > *:nth-child(2) { --cinema-index: 1; }
+  .landing-market > *:nth-child(3) { --cinema-index: 2; }
+  .landing-market > *:nth-child(n + 4) { --cinema-index: 3; }
+}
+
 /* ---- the shimmer --------------------------------------------------------
    Anything still waiting breathes. This hangs off `aria-busy`, which the app
    already sets, so a pending surface is styled by the same attribute that
@@ -198,6 +292,20 @@ input, select, textarea {
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  /* The opening and the scroll-driven reveals are non-essential by
+     construction: every word is present either way, and the only thing lost
+     is the order they arrive in. `animation: none` rather than a 0.01ms
+     duration, because a `backwards` fill would otherwise hold the first frame
+     — an invisible headline — for that instant. */
+  .cinema-line,
+  .landing-reveal,
+  .landing-market,
+  .landing-market > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

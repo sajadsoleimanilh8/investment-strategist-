@@ -14,6 +14,7 @@
  * prices above it are the one exception, because they come from a real
  * WebSocket connection to a real provider (see useLiveMarket / app/market/live.py).
  */
+import type React from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -53,6 +54,17 @@ const CAPABILITIES = [
   { title: "Goals & Simulate", body: "Track every goal against real progress. Run a scenario (a raise, a move, a new debt) and see the honest downstream effect." },
   { title: "Ask", body: "A financial assistant that explains your own numbers back to you, in plain terms." },
 ];
+
+/** The opening lines arrive in sequence rather than together.
+ *
+ * A custom property rather than an inline `animationDelay`, because the
+ * duration and easing stay in motion.css where the rest of the vocabulary
+ * lives — this only says *when*, not how. Under prefers-reduced-motion the
+ * delays are still set and simply never used: the media query at the foot of
+ * motion.css drops the animation entirely and the text is there on frame one.
+ */
+const lineDelay = (index: number) =>
+  ({ "--cinema-index": index } as React.CSSProperties);
 
 /** Every section reveals itself once, on the way into view — see the note
  * in landing.css's Motion block on why nothing here repeats or hijacks scroll. */
@@ -202,20 +214,29 @@ export function Landing() {
       </header>
 
       <main>
-        <Reveal className="landing-intro">
+        {/* The opening. It resolves line by line rather than as one block:
+            the headline is two lines and a claim, and letting the second land
+            after the first is the difference between a page appearing and a
+            page being said. Everything here is opacity and transform, so it
+            costs no layout and cannot shift the CTA under the reader's cursor. */}
+        <section className="landing-intro landing-intro--cinema">
           <h1>
-            Understand the <span className="landing-accent">structure</span> behind your
-            financial life.
+            <span className="cinema-line" style={lineDelay(0)}>
+              Understand the <span className="landing-accent">structure</span>
+            </span>{" "}
+            <span className="cinema-line" style={lineDelay(1)}>
+              behind your financial life.
+            </span>
           </h1>
-          <p>
+          <p className="cinema-line" style={lineDelay(2)}>
             A deterministic model of where your money actually stands, explained in plain
             language. Not a forecast dressed up as a fact.
           </p>
-          <div className="landing-intro__actions">
+          <div className="landing-intro__actions cinema-line" style={lineDelay(3)}>
             <Link to="/signup" className="landing-btn landing-btn--primary">Create an account</Link>
             <Link to="/login" className="landing-btn landing-btn--ghost">Sign in</Link>
           </div>
-        </Reveal>
+        </section>
 
         {/* The marker the nav's state is tied to: it changes when *this*
             crosses the top of the viewport, which anchors the change to the end
