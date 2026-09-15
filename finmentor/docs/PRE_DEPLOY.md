@@ -80,6 +80,11 @@ Password reset and third-party sign-in both work offline in a demo and both
 need real credentials in production. Neither has ever spoken to a live
 provider from this machine.
 
+Run `python scripts/oauth_doctor.py` first and after each change. It prints
+the exact redirect URI to register per provider, says which settings are still
+missing, and catches the mismatches that otherwise surface as a message from
+the provider that does not say which side is wrong. It prints no secrets.
+
 - [ ] **A mail transport.** `MAIL_TRANSPORT=smtp` plus the `SMTP_*` settings.
       The API refuses to start outside DEMO_MODE on the console transport,
       because that one writes reset links into the log, and a link in a log is
