@@ -124,18 +124,27 @@ export function useLiveMarket(symbols: readonly string[] = []) {
     };
   }, []);
 
-  // The seed. Once, and only for a feed that is actually running: with no
-  // feed the panel renders no chart, so fetching a series for it would be a
-  // request nobody reads. A failure here is silent by design — the chart is
-  // an enhancement, and the price above it is the thing that matters.
+  // The seed. Once, and only once the server has confirmed a feed: `off` is
+  // not the only status that means "no chart to seed", and neither is it the
+  // first one seen — the hook starts at "connecting", so a guard against
+  // `off` alone fires the request before the server has said anything, which
+  // is how DEMO_MODE ended up fetching a series for a panel that renders no
+  // chart. Waiting for "live" is the only status that actually answers the
+  // question being asked.
+  //
+  // The dependency is the joined symbols rather than the array, because a
+  // caller that maps its assets inline passes a new array every render, and
+  // a re-render between the request and its response would otherwise run the
+  // cleanup below and discard a seed that had already been paid for.
   const seededRef = useRef(false);
+  const seedKey = symbols.join(",");
   useEffect(() => {
-    if (seededRef.current || status === "off" || symbols.length === 0) return;
+    if (seededRef.current || status !== "live" || seedKey === "") return;
     seededRef.current = true;
 
     let cancelled = false;
     Promise.all(
-      symbols.map(async (symbol) => {
+      seedKey.split(",").map(async (symbol) => {
         try {
           const series = await getPublicSeries(symbol);
           return [symbol, series.points] as const;
@@ -166,7 +175,7 @@ export function useLiveMarket(symbols: readonly string[] = []) {
     return () => {
       cancelled = true;
     };
-  }, [status, symbols]);
+  }, [status, seedKey]);
 
   return { status, source, ticks, history };
 }
