@@ -1,17 +1,17 @@
 """goals routes (spec section 22): GET /api/goals/{user_id}, POST /api/goals,
-PUT /api/goals/{goal_id}.
+PUT /api/goals/{goal_id}, DELETE /api/goals/{goal_id}.
 
 Progress and ETA come from `services.goal_engine`; the route never does goal
 maths of its own.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.deps import CurrentUser, DbSession, OwnedUserId, assert_owns, load_twin, load_user, require_user
 from app.models.goal import FinancialGoal
 from app.repositories import goals as goals_repo
-from app.schemas.finance import GoalCreate, GoalIn, GoalOut
+from app.schemas.finance import GoalCreate, GoalIn, GoalOut, GoalUpdate
 from app.services import goal_engine
 
 #: Guarded at the router, not per route: a route added here later is
@@ -52,11 +52,49 @@ def create_goal(payload: GoalCreate, db: DbSession, current_user: CurrentUser):
     return _to_out(db, goal)
 
 
-@router.put("/goals/{goal_id}", response_model=GoalOut)
-def update_goal(goal_id: int, payload: GoalIn, db: DbSession):
+def _own_goal(db, goal_id: int, current_user) -> FinancialGoal:
+    """A goal the caller owns, or the right refusal.
+
+    The path carries a `{goal_id}`, not a `{user_id}`, so `owned_user_id`
+    cannot reach it — the owner is a property of the row, not of the URL. The
+    row has to be loaded before the question can even be asked, which is why
+    this is `assert_owns` in the body rather than a dependency.
+
+    404 before 403 on purpose: a goal id that does not exist is not somebody
+    else's goal, and answering 403 for it would turn these routes into a way
+    to count the rows in the table.
+
+    One helper rather than three copies, because "every goal mutation checks
+    ownership" should be something you can see rather than something you have
+    to audit — `PUT` shipped without it once already.
+    """
     goal = goals_repo.get(db, goal_id)
     if goal is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="goal not found")
+    assert_owns(current_user, goal.user_id)
+    return goal
+
+
+@router.put("/goals/{goal_id}", response_model=GoalOut)
+def update_goal(goal_id: int, payload: GoalUpdate, db: DbSession, current_user: CurrentUser):
+    """Replace a goal the caller owns, and optionally archive or restore it."""
+    goal = _own_goal(db, goal_id, current_user)
     goals_repo.update(db, goal, payload)
     db.commit()
     return _to_out(db, goal)
+
+
+@router.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT,
+               response_class=Response)
+def delete_goal(goal_id: int, db: DbSession, current_user: CurrentUser) -> Response:
+    """Remove a goal for good.
+
+    Separate from archiving (`is_active: false` on the PUT above), which is
+    what a finished goal wants. This is for one that should not exist, and it
+    is the only irreversible thing a user can do here, which is why the client
+    asks first.
+    """
+    goal = _own_goal(db, goal_id, current_user)
+    goals_repo.delete(db, goal)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

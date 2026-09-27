@@ -1,0 +1,814 @@
+/* ==========================================================================
+   CINEMA
+   --------------------------------------------------------------------------
+   The atmospheric and interactive layer, on top of the vocabulary in
+   motion.css.
+
+   motion.css answers "what just happened?" — a value ticked, a panel resolved,
+   a request is still running. It is the app's functional motion and none of it
+   is negotiable. This file answers a different question: what does the product
+   feel like to move through. Depth, light, weight, continuity between one
+   section and the next.
+
+   The two are kept apart deliberately, because they fail differently. If the
+   whole of this file were deleted the app would still tell the reader
+   everything it tells them now; it would simply be flat. Nothing in here
+   carries information, which is exactly what licenses it to be switched off
+   wholesale under prefers-reduced-motion at the foot of the file.
+
+   Three rules constrain everything below.
+
+   Only the compositor. Every animated property here is `transform`, `opacity`
+   or `filter`. Nothing animates width, height, top, left, margin or a colour
+   that would force a repaint of a subtree. This is what holds 60fps with three
+   drifting gradient layers, a cursor light and a grain plate all live at once.
+
+   Nothing new in the palette. Every colour is `color-mix()` of a token that
+   already existed, at an alpha low enough that no text contrast ratio moves.
+   The skin is not being redesigned here; it is being lit.
+
+   Nothing moves on the path to an action. Magnetic pulls are capped at 6px,
+   card lean at 4 degrees, and no entrance ever animates an element's height —
+   a control must never travel out from under the cursor about to press it.
+   ========================================================================== */
+
+:root {
+  /* Ambient motion runs in tens of seconds, not hundreds of milliseconds. The
+     three drift durations are mutually indivisible on purpose: any two of them
+     would visibly re-sync on a common multiple, and a background that repeats
+     is a background the reader starts watching. */
+  --ambient-drift-a: 37s;
+  --ambient-drift-b: 53s;
+  --ambient-drift-c: 43s;
+  /* How much of the field reaches the page. Full strength on the public page;
+     halved inside the app, where the content is dense and made of figures. */
+  --ambient-strength: 1;
+
+  /* The scene depth for a card's lean. Far enough back that four degrees is a
+     lean and not a fold — a short perspective turns the same rotation into a
+     dramatic keystone and softens the type inside the card. */
+  --tilt-perspective: 1100px;
+
+  /* Resting values, so a card or control that has never been pointed at still
+     has something to interpolate from. Each hook overwrites these on the
+     element itself; these are the floor. */
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --tilt-active: 0;
+  --glare-x: 50%;
+  --glare-y: 0%;
+  --magnet-x: 0px;
+  --magnet-y: 0px;
+  --pointer-x: 50vw;
+  --pointer-y: 50vh;
+  --pointer-idle: 0;
+
+  /* The long end of the scale, for a section resolving as the reader arrives
+     at it. motion.css tops out at 520ms, which is right for a panel inside the
+     app and too brisk for a full band of a page. */
+  --motion-cinematic: 760ms;
+}
+
+/* ==========================================================================
+   1. THE AMBIENT FIELD
+   ========================================================================== */
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  /* Its own stacking and compositing context, so nothing inside it can
+     interleave with page content and the whole layer is promoted once. */
+  isolation: isolate;
+  contain: strict;
+}
+
+/* Everything the reader actually reads sits above the field. The app shell and
+   the landing page are the two roots, and both are transparent — the field
+   shows through them rather than around them. */
+.app,
+.landing {
+  position: relative;
+  z-index: 1;
+}
+
+/* Inside the app the field is halved. A dashboard is a screen of numbers being
+   read, not a composition being looked at, and the same intensity that reads as
+   atmosphere behind a headline reads as a smudge behind a table. */
+html:has(.app) {
+  --ambient-strength: 0.45;
+}
+
+/* ---- the drifting light -------------------------------------------------
+   Three fields, each one radial gradient on a single element, moved only by
+   transform. `will-change` is declared once here rather than on everything
+   that moves: it is a promise to the compositor and an expensive one to make
+   casually, and these three elements are the only ones on the page animating
+   continuously. */
+.ambient__orb {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  /* Opacity is the strength dial; the gradients themselves stay constant. */
+  opacity: var(--ambient-strength);
+}
+
+.ambient__orb--ember {
+  width: 80vmax;
+  height: 80vmax;
+  top: -30vmax;
+  left: -20vmax;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--color-brand) 10%, transparent),
+    transparent 100%
+  );
+  animation: driftA var(--ambient-drift-a) var(--ease-in-out) infinite alternate;
+}
+
+.ambient__orb--azure {
+  width: 70vmax;
+  height: 70vmax;
+  top: 20vmax;
+  right: -30vmax;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--color-accent) 9%, transparent),
+    transparent 100%
+  );
+  animation: driftB var(--ambient-drift-b) var(--ease-in-out) infinite alternate;
+}
+
+/* The deep one is the warm terminus rather than the accent, and it sits low.
+   It is what keeps the bottom of a long page from going flatly black as the
+   other two drift out of frame. */
+.ambient__orb--deep {
+  width: 90vmax;
+  height: 90vmax;
+  bottom: -45vmax;
+  left: 20vw;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--color-brand-deep) 30%, transparent),
+    transparent 100%
+  );
+  animation: driftC var(--ambient-drift-c) var(--ease-in-out) infinite alternate;
+}
+
+/* Travel is in vmax so the drift covers proportionally the same ground on a
+   phone as on a 34-inch monitor, and the rotation is small — the scale change
+   is what reads as the light breathing, the rotation only stops the gradient's
+   soft edge from tracing a straight line. */
+@keyframes driftA {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(12vmax, 8vmax, 0) scale(1.18) rotate(8deg); }
+}
+@keyframes driftB {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-14vmax, 12vmax, 0) scale(0.92) rotate(-10deg); }
+}
+@keyframes driftC {
+  from { transform: translate3d(0, 0, 0) scale(0.95); }
+  to   { transform: translate3d(10vmax, -10vmax, 0) scale(1.15) rotate(6deg); }
+}
+
+/* A hidden tab stops paying for any of it. Set by AmbientField on
+   `visibilitychange`. */
+.ambient[data-paused] * {
+  animation-play-state: paused;
+}
+
+/* ---- the cursor light ---------------------------------------------------
+   One more field, centred on the pointer. It is translated rather than
+   positioned — `left`/`top` would lay out sixty times a second — and it fades
+   in only once the pointer has actually moved, so it never appears at a
+   default position the reader did not put it in. */
+.ambient__cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46vmax;
+  height: 46vmax;
+  margin: -23vmax 0 0 -23vmax;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--color-brand) 7%, transparent),
+    transparent 100%
+  );
+  opacity: calc(var(--pointer-idle) * var(--ambient-strength));
+  transform: translate3d(var(--pointer-x), var(--pointer-y), 0);
+  will-change: transform, opacity;
+  /* The position is not transitioned — it tracks the pointer exactly, and a
+     transition on it would read as lag. Only the fade in and out is eased. */
+  transition: opacity var(--motion-slow) var(--ease-out);
+}
+
+/* ---- grain --------------------------------------------------------------
+   Static, and the only thing in this file that is an image. Large soft
+   gradients on a matte near-black band into visible steps on an 8-bit display;
+   a noise plate at 3.5% breaks the steps up and is the difference between the
+   field reading as light and reading as a compression artefact. */
+.ambient__grain {
+  position: absolute;
+  inset: -50%;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---- vignette -----------------------------------------------------------
+   The part that buys the rest of it. Colour is allowed at the edges of the
+   frame and not in the middle of it, so every gradient above is strongest
+   exactly where there is no text and falls to the canvas colour where there
+   is. This is why the field costs nothing in contrast. */
+.ambient__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 120% 90% at 50% 45%,
+    transparent 0%,
+    color-mix(in srgb, var(--color-bg) 55%, transparent) 55%,
+    var(--color-bg) 100%
+  );
+}
+
+/* The two page roots lose their opaque fill so the field is visible through
+   them. The canvas colour is on `body` already, so nothing here changes what
+   the page is coloured — only which layer paints it. */
+.landing { background: transparent; }
+
+/* ==========================================================================
+   2. THE SCROLL SYSTEM
+   --------------------------------------------------------------------------
+   Two implementations of one idea, and the page picks whichever it can run.
+
+   Where `animation-timeline: view()` exists the reveal is scroll-*linked*: the
+   element's progress through the viewport is the animation's clock, so a slow
+   scroll gets a slow reveal and scrolling back up runs it backwards. There is
+   no scroll listener, no rAF and no hijack anywhere in this — the scrollbar
+   stays entirely the reader's, which is the single non-negotiable part of the
+   brief for a page that people arrive at to read.
+
+   Everywhere else the IntersectionObserver in `useInView` flips a class and the
+   same motion plays as a one-shot. Same choreography, a switch instead of a
+   dial.
+   ========================================================================== */
+
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 20px, 0);
+  transition:
+    opacity var(--motion-cinematic) var(--ease-out-soft),
+    transform var(--motion-cinematic) var(--ease-out-soft);
+  /* Children of a revealing block arrive after it, in order. The block sets
+     `--reveal-index` per child; this is the delay that reads from it. */
+  transition-delay: calc(var(--reveal-index, 0) * 70ms);
+}
+[data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* A block whose children stagger. The index is set in CSS rather than inline
+   so a page can opt in without every call site computing delays. */
+[data-reveal-group] > * {
+  opacity: 0;
+  transform: translate3d(0, 16px, 0);
+  transition:
+    opacity var(--motion-slow) var(--ease-out-soft),
+    transform var(--motion-slow) var(--ease-out-soft);
+}
+[data-reveal-group].is-in > * {
+  opacity: 1;
+  transform: none;
+}
+[data-reveal-group] > *:nth-child(1) { transition-delay: 0ms; }
+[data-reveal-group] > *:nth-child(2) { transition-delay: 70ms; }
+[data-reveal-group] > *:nth-child(3) { transition-delay: 140ms; }
+[data-reveal-group] > *:nth-child(4) { transition-delay: 210ms; }
+[data-reveal-group] > *:nth-child(5) { transition-delay: 280ms; }
+[data-reveal-group] > *:nth-child(6) { transition-delay: 350ms; }
+/* Capped, for the reason motion.css caps its stagger: past seven the last one
+   arrives late enough to read as a bug rather than as a flourish. */
+[data-reveal-group] > *:nth-child(n + 7) { transition-delay: 420ms; }
+
+@supports (animation-timeline: view()) {
+  /* The observer's job is done: the element starts visible and the timeline
+     drives it. `both` holds the end state past the range so nothing fades back
+     out as it leaves the top of the screen. */
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    animation: revealArrive linear both;
+    animation-timeline: view();
+    animation-range: entry 8% cover 32%;
+  }
+
+  [data-reveal-group] > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    animation: revealArrive linear both;
+    animation-timeline: view();
+    animation-range: entry 5% cover 30%;
+  }
+}
+
+@keyframes revealArrive {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---- parallax -----------------------------------------------------------
+   Depth, not displacement. Layers move at slightly different rates as a band
+   passes the viewport, which is what stops a long page reading as a stack of
+   unrelated rectangles.
+
+   This is scroll-linked only. There is deliberately no JS fallback: a
+   scroll-listener parallax is the classic way to lose a frame budget, and a
+   browser without `scroll-timeline` simply gets a page with no parallax, which
+   is the page as it is today and perfectly good. */
+@supports (animation-timeline: view()) {
+  [data-parallax] {
+    animation: parallaxRise linear both;
+    animation-timeline: view();
+    animation-range: cover;
+    will-change: transform;
+  }
+  /* Travel is small. The reference is a camera with a long lens, not a
+     diorama: 28px across a full viewport pass is felt and not seen. */
+  @keyframes parallaxRise {
+    from { transform: translate3d(0, 28px, 0); }
+    to   { transform: translate3d(0, -28px, 0); }
+  }
+
+  [data-parallax="slow"] {
+    animation-name: parallaxRiseSlow;
+  }
+  @keyframes parallaxRiseSlow {
+    from { transform: translate3d(0, 14px, 0); }
+    to   { transform: translate3d(0, -14px, 0); }
+  }
+}
+
+/* ==========================================================================
+   3. CARDS
+   --------------------------------------------------------------------------
+   A card in this system is already a dark surface floating on a black halo.
+   What it gains here is a response to being approached: it lifts fractionally,
+   its edge catches light on the side the cursor is on, and a broad sheen tracks
+   across it. The lean is four degrees, and the whole thing is driven by CSS
+   variables that `useTilt` writes — so a card with no hook attached simply
+   renders the resting state and costs nothing.
+   ========================================================================== */
+
+/* The card list. Kept identical to CARD_SELECTOR in useSurfaceField.ts — that
+   file carries the note on why these are matched by their existing structure
+   rather than by a class the pages opt into. If one list grows, so must the
+   other. */
+:is(.tilt-card, .app main > section, .landing-market, .auth__card) {
+  position: relative;
+  transform: perspective(var(--tilt-perspective))
+             rotateX(var(--tilt-x))
+             rotateY(var(--tilt-y))
+             translate3d(0, calc(var(--tilt-active) * -3px), 0);
+  transform-style: preserve-3d;
+  /* The lean itself is not transitioned — it tracks the pointer, and a
+     transition there reads as the card lagging behind the cursor. The *return*
+     to flat is, which is what `--tilt-active` dropping to 0 triggers. */
+  transition:
+    transform var(--motion-moderate) var(--ease-out),
+    box-shadow var(--motion-moderate) var(--ease-out),
+    border-color var(--motion-quick) var(--ease-out);
+}
+
+/* While the pointer is over it the card is tracking, so the transform has to
+   be instant. This is the only place the two states differ. */
+:is(.tilt-card, .app main > section, .landing-market, .auth__card):hover {
+  transition:
+    transform 60ms linear,
+    box-shadow var(--motion-moderate) var(--ease-out),
+    border-color var(--motion-quick) var(--ease-out);
+  /* The halo deepens and the edge comes up out of transparent. Both are
+     already declared on `section` in layout.css, so this is a change of value
+     rather than a new piece of chrome. */
+  box-shadow: 0 0 60px rgb(0 0 0 / 0.9);
+  border-color: color-mix(in srgb, var(--color-border) 100%, transparent);
+}
+
+/* ---- the sheen ----------------------------------------------------------
+   A soft highlight whose origin is the cursor. White at 4% over a #191919
+   surface is about one tonal step — the same distance as surface to elevated,
+   which is to say exactly as much light as this system's depth model already
+   uses. It is `::after` because `::before` is free to be used by a component. */
+:is(.tilt-card, .app main > section, .landing-market, .auth__card)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle 22rem at var(--glare-x) var(--glare-y),
+    rgb(255 255 255 / 0.045),
+    transparent 70%
+  );
+  opacity: var(--tilt-active);
+  transition: opacity var(--motion-moderate) var(--ease-out);
+}
+
+/* Content lifts fractionally out of the card as it leans, which is what makes
+   the lean read as depth rather than as the whole panel being rotated as one
+   flat image. 1px of Z, no more: the figures inside have to stay crisp. */
+:is(.tilt-card, .app main > section, .landing-market, .auth__card) > * {
+  transform: translateZ(calc(var(--tilt-active) * 1px));
+}
+
+/* ==========================================================================
+   4. CONTROLS
+   --------------------------------------------------------------------------
+   A button here carries no fill, so everything it can do to acknowledge a
+   press has to happen in shape, light and position. Three devices: the
+   magnetic lean toward an approaching cursor, a light sweep across the face on
+   hover, and a press that actually compresses.
+   ========================================================================== */
+
+button,
+a.landing-btn,
+a.provider-button,
+a.landing-nav__cta {
+  position: relative;
+  overflow: hidden;
+  /* The magnet offset composes with the press. Both are translations, so they
+     live in one transform and neither can clobber the other. */
+  transform: translate3d(var(--magnet-x), var(--magnet-y), 0);
+  transition:
+    transform var(--motion-moderate) var(--ease-out),
+    border-color var(--motion-quick) var(--ease-out),
+    color var(--motion-quick) var(--ease-out),
+    box-shadow var(--motion-quick) var(--ease-out);
+}
+
+/* The sweep. A narrow band of light crossing the control once per hover — not
+   a loop, and not a shimmer: it plays on entry and is done, which is what
+   separates "this responded to me" from "this is decorated".
+
+   `translateX` on a pseudo-element, so it composites and never touches the
+   control's own layout or the text inside it. */
+button::before,
+a.landing-btn::before,
+a.provider-button::before,
+a.landing-nav__cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgb(255 255 255 / 0.11) 50%,
+    transparent 75%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+}
+
+button:hover:not(:disabled)::before,
+a.landing-btn:hover::before,
+a.provider-button:hover::before,
+a.landing-nav__cta:hover::before {
+  opacity: 1;
+  transform: translateX(120%);
+  transition:
+    transform var(--motion-slow) var(--ease-out),
+    opacity var(--motion-quick) linear;
+}
+
+/* The press. `translateY(1px)` was already the acknowledgement in layout.css;
+   this keeps it and adds a fractional compression, which is what makes a
+   fill-less pill feel like it has a surface. The magnet offset is preserved —
+   dropping it here would make a control snap to centre at the moment of the
+   press, which is the one moment it must not move. */
+button:active:not(:disabled),
+a.landing-btn:active,
+a.provider-button:active {
+  transform: translate3d(var(--magnet-x), calc(var(--magnet-y) + 1px), 0) scale(0.985);
+  transition: transform var(--motion-instant) var(--ease-out);
+}
+
+/* An icon or a chevron inside a control moves with the hover rather than
+   sitting still while everything around it responds. */
+button .icon,
+a.landing-btn .icon {
+  display: inline-block;
+  transition: transform var(--motion-moderate) var(--ease-out);
+}
+button:hover .icon,
+a.landing-btn:hover .icon { transform: translateX(3px); }
+
+/* ---- list rows ----------------------------------------------------------
+   A row-button has no pill and no border by design, so it cannot use any of
+   the above. It gets the one device that suits a row: the content slides a
+   few pixels toward the reader's eye, and a hairline of accent grows at the
+   leading edge to say which row is live. */
+.row-button {
+  position: relative;
+  transition:
+    color var(--motion-quick) var(--ease-out),
+    transform var(--motion-moderate) var(--ease-out);
+}
+.row-button::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(var(--space-2) * -1);
+  inset-block: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--motion-moderate) var(--ease-out);
+}
+.row-button:hover { transform: translateX(3px); }
+.row-button:hover::before,
+.row-button:focus-visible::before { transform: scaleY(1); }
+
+/* ==========================================================================
+   5. NAVIGATION
+   --------------------------------------------------------------------------
+   The landing nav already changes state at the end of the intro (see
+   landing.css). What it gains here is the blur that makes it read as glass
+   over moving content rather than as an opaque bar, and an entrance so it
+   arrives with the page instead of being there before it.
+   ========================================================================== */
+
+.landing-nav {
+  animation: navDescend var(--motion-cinematic) var(--ease-out-soft) backwards;
+  animation-delay: 120ms;
+}
+
+@keyframes navDescend {
+  from { opacity: 0; transform: translate3d(0, -12px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Grounded is now glass rather than fill: the ambient field and the content
+   both show through, blurred. The fallback for a browser with no
+   `backdrop-filter` is the opaque bar that is already declared in landing.css,
+   so this is purely additive. */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .landing-nav.is-grounded {
+    background: color-mix(in srgb, var(--color-bg) 72%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
+  }
+}
+
+/* The app's own header gets the same treatment, and sticks, which it did not
+   before. On a dense screen the nav leaving the top of the viewport is the
+   one piece of chrome a reader is most likely to want back. */
+.app > header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .app > header {
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
+  }
+}
+
+/* A nav link's underline already marks the current page. Hover now previews it
+   at low opacity, growing from the centre — the same gesture the active state
+   uses, so hovering reads as "this is what pressing would mean". */
+.app > header nav a::after,
+.landing-nav nav a::after {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: -2px;
+  height: 1px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition:
+    transform var(--motion-moderate) var(--ease-out),
+    opacity var(--motion-quick) var(--ease-out);
+  opacity: 0;
+}
+.app > header nav a,
+.landing-nav nav a { position: relative; }
+
+.app > header nav a:hover::after,
+.landing-nav nav a:hover::after {
+  transform: scaleX(1);
+  opacity: 0.45;
+}
+
+/* The current page keeps a full-strength mark, and it wins over the hover
+   preview above by being declared after it. */
+.app > header nav a[aria-current="page"]::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+/* ==========================================================================
+   6. SECTION CONTINUITY
+   --------------------------------------------------------------------------
+   The brief's "one continuous composition" rather than section, gap, section.
+
+   The ambient field does most of this on its own by being one fixed layer the
+   whole page scrolls over. What is added here is a seam: the hairline rules
+   that already separate the landing page's bands fade out at their ends
+   instead of stopping dead, so a band boundary reads as a transition rather
+   than as a border.
+   ========================================================================== */
+
+.landing-capabilities__item,
+.landing-cta,
+.landing-footer,
+.landing-capabilities__item:last-child {
+  border-image: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-border) 18%,
+      var(--color-border) 82%,
+      transparent
+    ) 1;
+}
+
+/* A hairline that also catches the ambient warmth at its centre. Used on the
+   two full-width seams, where the fade has the most room to read. */
+.landing-cta,
+.landing-footer {
+  border-image: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-border) 20%,
+      color-mix(in srgb, var(--color-brand) 30%, var(--color-border)) 50%,
+      var(--color-border) 80%,
+      transparent
+    ) 1;
+}
+
+/* ==========================================================================
+   7. ROUTE TRANSITIONS
+   --------------------------------------------------------------------------
+   Native View Transitions where the browser has them. A crossfade with a small
+   vertical offset, at 280ms — the one number in this file that was chosen by
+   subtraction rather than taste. Anything longer and navigation inside an app
+   starts to feel like it is asking the reader to wait, and the brief is
+   explicit that navigation must never feel slow.
+
+   The ambient field is deliberately *not* part of the transition: it is
+   mounted above the router and carries the same `view-transition-name`
+   throughout, so it is the fixed thing the two screens cross-fade in front of.
+   That is the shared element that makes this read as one product rather than
+   two documents.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: routeLeave 200ms var(--ease-out) both;
+  }
+  ::view-transition-new(root) {
+    animation: routeEnter 280ms var(--ease-out-soft) both;
+  }
+}
+
+@keyframes routeLeave {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translate3d(0, -8px, 0); }
+}
+@keyframes routeEnter {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The field is excluded from the snapshot entirely. Without this the browser
+   captures it into both the old and new images and cross-fades a background
+   with itself, which is both wasted work and a visible flicker on a layer that
+   should be the one constant across the change. */
+.ambient {
+  view-transition-name: ambient;
+}
+
+/* ==========================================================================
+   8. DATA
+   --------------------------------------------------------------------------
+   The chart and figure devices, extending what motion.css already established.
+   Its rule stands and is not relaxed: a figure the engine sent is printed, and
+   only a *derived* figure is ever performed. Nothing below animates a value —
+   these animate the drawing of a value that is already correct.
+   ========================================================================== */
+
+/* A bar or a meter grows from its own baseline. `transform: scaleX` rather
+   than an animated width, so it never reflows the row it is in. */
+[data-grow] {
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--motion-cinematic) var(--ease-out-soft);
+  transition-delay: calc(var(--reveal-index, 0) * 60ms);
+}
+[data-grow].is-in { transform: scaleX(1); }
+
+/* A table resolving row by row as it arrives, rather than the whole block
+   appearing at once. This replaces nothing — motion.css already animates a
+   `tbody > tr` that is genuinely new — it only adds the arrival case, and only
+   where a page opts in by marking the table. */
+[data-rows] tbody > tr {
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  transition:
+    opacity var(--motion-moderate) var(--ease-out),
+    transform var(--motion-moderate) var(--ease-out);
+}
+[data-rows].is-in tbody > tr { opacity: 1; transform: none; }
+[data-rows].is-in tbody > tr:nth-child(1) { transition-delay: 0ms; }
+[data-rows].is-in tbody > tr:nth-child(2) { transition-delay: 55ms; }
+[data-rows].is-in tbody > tr:nth-child(3) { transition-delay: 110ms; }
+[data-rows].is-in tbody > tr:nth-child(4) { transition-delay: 165ms; }
+[data-rows].is-in tbody > tr:nth-child(5) { transition-delay: 220ms; }
+[data-rows].is-in tbody > tr:nth-child(n + 6) { transition-delay: 275ms; }
+
+/* The headline score, lit. It already counts up (useCountUp); what it gains is
+   a soft bloom behind the digits that resolves with them, so the one figure the
+   dashboard exists to show reads as the brightest thing on the screen. */
+.score__value {
+  position: relative;
+  animation: scoreBloom var(--motion-count) var(--ease-out-soft) both;
+}
+@keyframes scoreBloom {
+  from { text-shadow: 0 0 28px rgb(255 255 255 / 0.35); opacity: 0.85; }
+  to   { text-shadow: 0 0 0 rgb(255 255 255 / 0); opacity: 1; }
+}
+
+/* A sparkline's line already draws itself. The area under it, where a page
+   draws one, fades in behind the stroke once the stroke has travelled. */
+.sparkline-area {
+  opacity: 0;
+  transition: opacity var(--motion-slow) var(--ease-out) var(--motion-count);
+}
+.sparkline-area.is-drawn { opacity: 1; }
+
+/* ==========================================================================
+   9. REDUCED MOTION
+   --------------------------------------------------------------------------
+   Off, not slower, and with the final state rendered immediately — the same
+   contract motion.css already sets.
+
+   This file is easier to switch off than that one, because nothing in it
+   carries information: the ambient field is not rendered at all (AmbientField
+   returns null), the pointer hooks never attach a listener, and everything
+   below collapses the remaining transforms to their settled state. A reader
+   with the preference set gets exactly the product that existed before this
+   file, which is the correct fallback.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-reveal-group] > *,
+  [data-parallax],
+  [data-grow],
+  [data-rows] tbody > tr {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .tilt-card,
+  :is(.tilt-card, .app main > section, .landing-market, .auth__card) > * {
+    transform: none !important;
+    transition: none !important;
+  }
+  :is(.tilt-card, .app main > section, .landing-market, .auth__card)::after { display: none; }
+
+  button,
+  a.landing-btn,
+  a.provider-button,
+  a.landing-nav__cta {
+    transform: none !important;
+  }
+  button::before,
+  a.landing-btn::before,
+  a.provider-button::before,
+  a.landing-nav__cta::before { display: none; }
+
+  .row-button:hover { transform: none !important; }
+
+  .landing-nav { animation: none !important; }
+  .score__value { animation: none !important; text-shadow: none !important; }
+  .sparkline-area { opacity: 1; transition: none; }
+
+  /* Nav underlines still change, they just change at once: the current-page
+     mark is information and must not disappear with the motion. */
+  .app > header nav a::after,
+  .landing-nav nav a::after { transition: none !important; }
+}

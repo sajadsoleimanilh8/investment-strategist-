@@ -65,7 +65,14 @@ export interface Goal {
 
 export interface FinancialTwin {
   income: number;
+  /** Carried so the profile form can seed itself from what it was given
+   * rather than defaulting, which is what used to reset it on every save. */
+  income_type: string;
   expenses: ExpenseBreakdown;
+  /** Null until the user sets one. The baseline the budget-stability
+   * component is measured against; without it that component scores the
+   * neutral 12/20 rather than anything the user did. */
+  planned_budget: ExpenseBreakdown | null;
   monthly_expenses: number;
   essential_monthly_expenses: number;
   monthly_savings: number;

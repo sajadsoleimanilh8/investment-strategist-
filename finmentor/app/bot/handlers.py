@@ -204,8 +204,19 @@ def _create_goal(user_id: int, draft: dict) -> str:
 
 
 def _ask_payload(user_id: int, question: str) -> str:
+    """The answer, or the pipeline's reason for not producing one.
+
+    The bot reaches the model through the same `answer_question` the HTTP
+    route does, and the length cap and per-user budget now live inside it
+    rather than on the route. Catching the refusal here is what turns it into
+    a sentence rather than a traceback — the limits themselves are not this
+    module's business and are deliberately not repeated here.
+    """
     with session() as db:
-        return ask_pipeline.answer_question(db, user_id, question).text
+        try:
+            return ask_pipeline.answer_question(db, user_id, question).text
+        except ask_pipeline.AskRefused as refused:
+            return refused.message
 
 
 # --- commands -----------------------------------------------------------

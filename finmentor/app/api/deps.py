@@ -14,7 +14,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.ai.intent import ParsedIntent
-from app.core import security
+from app.core import limits, security
 from app.core.config import settings
 from app.db.session import get_db  # noqa: F401  re-exported for routes
 from app.market import cache as market_cache
@@ -345,25 +345,16 @@ OwnedUserId = Annotated[int, Depends(owned_user_id)]
 
 # --- rate limiting -------------------------------------------------------
 #
-# Redis is optional infrastructure. If it is down, the limiter logs and lets the
-# request through: a cache outage taking the whole API with it would be a worse
-# failure than the one the limiter prevents.
+# The counting lives in `app/core/limits.py`, framework-free, because the thing
+# worth protecting is the pipeline rather than the HTTP route in front of it —
+# `/ai/ask` was limited and the Telegram bot, which calls the same pipeline
+# directly, was not.
+#
+# What stays here is the dependencies for budgets that really are an HTTP
+# notion: signup and login are limited per address, and an address only exists
+# because there is a request.
 
-def _allow(bucket: str, identity: str, per_minute: int) -> bool:
-    if per_minute <= 0:
-        return True
-    try:
-        import redis
-
-        client = redis.Redis.from_url(settings.redis_url, socket_timeout=0.25)
-        key = security.rate_limit_key(identity, bucket)
-        used = client.incr(key)
-        if used == 1:
-            client.expire(key, 60)
-        return used <= per_minute
-    except Exception as exc:                       # unreachable, missing, misconfigured
-        log.warning("rate limiter unavailable, allowing the request: %s", exc)
-        return True
+_allow = limits.allow
 
 
 def auth_rate_limit(request: Request) -> None:
@@ -373,19 +364,6 @@ def auth_rate_limit(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="too many attempts — wait a minute and try again",
-        )
-
-
-def ask_rate_limit(current_user: CurrentUser) -> None:
-    """Per-user, on /ai/ask — the one route that costs a model call.
-
-    Per *user* rather than per address on purpose: a shared connection would
-    otherwise let one person's burst throttle everyone behind it.
-    """
-    if not _allow("ask", str(current_user.id), settings.ask_rate_limit_per_minute):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="you are asking faster than I can think — give it a moment",
         )
 
 

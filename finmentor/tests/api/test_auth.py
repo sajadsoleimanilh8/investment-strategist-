@@ -183,8 +183,70 @@ def test_me_reports_the_signed_in_user(raw_client, tokens):
     assert body["onboarded"] is False
 
 
-def test_logout_is_a_204_and_needs_nothing(raw_client):
-    assert raw_client.post("/api/auth/logout").status_code == 204
+# --- logging out actually ends the session -------------------------------
+#
+# This route used to be an empty function: the client dropped its own tokens
+# and the server did nothing. The refresh token therefore stayed valid for its
+# full fourteen days, so "sign out" on a shared machine ended nothing at all.
+# It now bumps `token_version`, the same mechanism a password reset uses.
+
+def test_logout_is_a_204(raw_client, tokens):
+    response = raw_client.post("/api/auth/logout",
+                               headers=auth(tokens["access_token"]))
+
+    assert response.status_code == 204
+
+
+def test_logout_needs_a_token_now_that_it_revokes_one(raw_client):
+    """It has to know whose session it is ending."""
+    assert raw_client.post("/api/auth/logout").status_code == 401
+
+
+def test_the_access_token_stops_working_after_logout(raw_client, tokens):
+    access = tokens["access_token"]
+    assert raw_client.get("/api/auth/me", headers=auth(access)).status_code == 200
+
+    raw_client.post("/api/auth/logout", headers=auth(access))
+
+    assert raw_client.get("/api/auth/me", headers=auth(access)).status_code == 401
+
+
+def test_the_refresh_token_stops_working_after_logout(raw_client, tokens):
+    """The one that mattered. An access token expires in thirty minutes on its
+    own; a refresh token is a two-week credential."""
+    raw_client.post("/api/auth/logout", headers=auth(tokens["access_token"]))
+
+    response = raw_client.post("/api/auth/refresh",
+                               json={"refresh_token": tokens["refresh_token"]})
+
+    assert response.status_code == 401
+
+
+def test_logout_ends_every_session_not_only_this_one(raw_client):
+    """Signing out signs the account out everywhere, by design.
+
+    There is no device list in this product, so there is nothing to scope a
+    revocation to. Asserted rather than left implicit because it is the
+    surprising half of the behaviour.
+    """
+    first = signup(raw_client).json()
+    second = login(raw_client).json()
+
+    raw_client.post("/api/auth/logout", headers=auth(second["access_token"]))
+
+    assert raw_client.get("/api/auth/me",
+                          headers=auth(first["access_token"])).status_code == 401
+
+
+def test_signing_in_again_after_logout_works(raw_client, tokens):
+    """Revocation must not lock the account; the password is unchanged."""
+    raw_client.post("/api/auth/logout", headers=auth(tokens["access_token"]))
+
+    fresh = login(raw_client)
+
+    assert fresh.status_code == 200
+    assert raw_client.get("/api/auth/me",
+                          headers=auth(fresh.json()["access_token"])).status_code == 200
 
 
 # --- the tokens themselves ----------------------------------------------
@@ -243,6 +305,9 @@ GUARDED = [
     ("GET", "/api/goals/1"),
     ("POST", "/api/goals"),
     ("PUT", "/api/goals/1"),
+    ("DELETE", "/api/goals/1"),
+    # Now revokes rather than doing nothing, so it has to know whose session.
+    ("POST", "/api/auth/logout"),
     ("POST", "/api/simulations"),
     ("GET", "/api/simulations/1"),
     ("GET", "/api/market/assets"),
@@ -269,7 +334,7 @@ def test_no_route_answers_without_a_token(raw_client, method, path):
 
 
 OPEN = [("POST", "/api/auth/signup"), ("POST", "/api/auth/login"),
-        ("POST", "/api/auth/refresh"), ("POST", "/api/auth/logout"),
+        ("POST", "/api/auth/refresh"),
         ("GET", "/healthz"), ("GET", "/api/market/public/BTC"),
         ("POST", "/api/auth/forgot-password"), ("POST", "/api/auth/reset-password")]
 
@@ -282,7 +347,6 @@ PUBLIC_PATHS = {
     "/api/auth/signup",
     "/api/auth/login",
     "/api/auth/refresh",
-    "/api/auth/logout",
     # Forgotten passwords: both are reached by someone who cannot sign in, so
     # neither can be behind a token. Both are rate limited per address.
     "/api/auth/forgot-password",
@@ -353,6 +417,10 @@ def two_users(raw_client):
             security.decode_token(theirs["access_token"]))
 
 
+#: Reads, templated on `{user_id}`. This list cannot reach a route keyed on
+#: any other resource id — which is how the goal IDOR got past it. The
+#: structural cover for that is `tests/api/test_ownership.py`; this stays
+#: as the readable per-route assertion for the `{user_id}` family.
 CROSS_USER = [
     ("GET", "/api/users/{id}"),
     ("GET", "/api/financial-profile/{id}"),
@@ -419,3 +487,94 @@ def test_a_403_is_not_a_404(raw_client, two_users):
 
     assert response.status_code == 403
     assert "your own" in error_message(response)
+
+
+# --- a goal is owned by its row, not by its URL --------------------------
+#
+# `PUT /api/goals/{goal_id}` is the one mutating route whose path carries a
+# resource id rather than a user id, so `owned_user_id` cannot guard it and
+# the `CROSS_USER` matrix above cannot reach it. It shipped unguarded for
+# exactly that reason. These four tests are the ones that would have caught
+# it, and `test_ownership.py` is the structural guard that catches the next
+# route like it.
+
+
+@pytest.fixture
+def two_users_with_tokens(raw_client):
+    """Both ids and both tokens: an attack needs a victim who can act too."""
+    mine = signup(raw_client, email="mine@example.com").json()
+    theirs = signup(raw_client, email="theirs@example.com").json()
+    return {
+        "my_id": security.decode_token(mine["access_token"]),
+        "my_token": mine["access_token"],
+        "their_id": security.decode_token(theirs["access_token"]),
+        "their_token": theirs["access_token"],
+    }
+
+
+@pytest.fixture
+def their_goal(raw_client, two_users_with_tokens) -> dict:
+    """A goal belonging to the *other* user, created by them."""
+    people = two_users_with_tokens
+    response = raw_client.post("/api/goals", headers=auth(people["their_token"]), json={
+        "user_id": people["their_id"], "name": "Their laptop",
+        "target_amount": 60_000_000, "current_amount": 20_000_000, "priority": 2,
+    })
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_updating_another_users_goal_is_403(raw_client, two_users_with_tokens, their_goal):
+    people = two_users_with_tokens
+
+    response = raw_client.put(
+        f"/api/goals/{their_goal['id']}", headers=auth(people["my_token"]),
+        json={"name": "Mine now", "target_amount": 1, "current_amount": 0, "priority": 1},
+    )
+
+    assert response.status_code == 403
+    assert "your own" in error_message(response)
+
+
+def test_a_refused_goal_update_changes_nothing(raw_client, two_users_with_tokens, their_goal):
+    """403 has to mean the write did not happen, not that it was not reported."""
+    people = two_users_with_tokens
+
+    raw_client.put(
+        f"/api/goals/{their_goal['id']}", headers=auth(people["my_token"]),
+        json={"name": "Mine now", "target_amount": 1, "current_amount": 0, "priority": 1},
+    )
+
+    after = raw_client.get(f"/api/goals/{people['their_id']}",
+                           headers=auth(people["their_token"])).json()
+    assert [goal["name"] for goal in after] == ["Their laptop"]
+    assert after[0]["target_amount"] == 60_000_000
+    assert after[0]["current_amount"] == 20_000_000
+    assert after[0]["priority"] == 2
+
+
+def test_updating_my_own_goal_still_works(raw_client, two_users_with_tokens, their_goal):
+    """The guard must refuse the stranger without refusing the owner."""
+    people = two_users_with_tokens
+
+    response = raw_client.put(
+        f"/api/goals/{their_goal['id']}", headers=auth(people["their_token"]),
+        json={"name": "Their laptop", "target_amount": 60_000_000,
+              "current_amount": 35_000_000, "priority": 2},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["current_amount"] == 35_000_000
+
+
+def test_updating_a_goal_that_does_not_exist_is_404(raw_client, two_users_with_tokens):
+    """404 before 403: a missing id is not somebody else's row, and answering
+    403 for it would make this route a way to count the table."""
+    people = two_users_with_tokens
+
+    response = raw_client.put(
+        "/api/goals/999999", headers=auth(people["my_token"]),
+        json={"name": "Nothing", "target_amount": 1, "current_amount": 0, "priority": 1},
+    )
+
+    assert response.status_code == 404

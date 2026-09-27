@@ -63,6 +63,10 @@ def get_cached_series(
 def store_series(db: Session, symbol: str, days: int, points: list[PricePoint]) -> None:
     """Write a fetched series to `market_snapshots`. The caller commits.
 
+    Used by the scheduled refresh, which writes every symbol and commits once.
+    A single read-through write goes through `get_or_fetch`, which commits for
+    itself — see the note there on why.
+
     `days` is what was asked for; the stored series is what came back, and its
     length is what later reads compare against.
     """
@@ -77,11 +81,32 @@ def store_series(db: Session, symbol: str, days: int, points: list[PricePoint]) 
 def get_or_fetch(
     db: Session, symbol: str, days: int = 30, *, now: datetime | None = None
 ) -> list[PricePoint]:
-    """Read-through: a fresh snapshot wins, otherwise fetch and store one."""
+    """Read-through: a fresh snapshot wins, otherwise fetch, store and keep one.
+
+    SPEC section 24 says no external market call sits on the per-request path
+    *once warm*, which is a statement about the steady state rather than a ban
+    on ever filling a cold cache from a request. Filling it is what this does.
+
+    The commit is the part worth explaining. It used to be the caller's job,
+    and `GET /api/me/summary` did not do it: `get_db` closes its session
+    without committing, so the flushed snapshot was rolled back on the way
+    out. The dashboard therefore called the provider on *every* load and never
+    once warmed the cache it had just paid to fill — the exact failure SPEC
+    section 24 exists to prevent, hidden behind a cache that looked like it was
+    working.
+
+    Leaving it to the caller means every future read path has to remember. A
+    cache entry nobody keeps is not a cache, so durability belongs to the
+    cache. This commits only the snapshot: it runs before any handler has
+    written business data of its own (the market context is assembled before
+    the chat turn, the summary writes nothing at all), so there is no
+    half-finished unit of work for it to end early.
+    """
     cached = get_cached_series(db, symbol, days, now=now)
     if cached is not None:
         return cached
 
     points = market_engine.get_series(symbol, days=days)
     store_series(db, symbol, days, points)
+    db.commit()
     return points

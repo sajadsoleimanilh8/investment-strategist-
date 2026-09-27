@@ -19,7 +19,8 @@ from app.api.deps import (
 )
 from app.repositories import goals as goals_repo
 from app.repositories import simulations as simulations_repo
-from app.schemas.simulation import WhatIfParams
+from app.schemas.finance import FINITE, MONEY_CEILING
+from app.schemas.simulation import MAX_HORIZON_MONTHS, WhatIfParams
 from app.services.decision_simulator import evaluate_purchase
 from app.services.simulation_engine import run_what_if
 from app.services.time_machine import compare_paths
@@ -37,6 +38,29 @@ class SimulationIn(BaseModel):
     kind: Literal["what_if", "time_machine", "decision"]
     #: shape depends on `kind`; validated per-kind below so the error names the field
     params: dict[str, Any] = Field(default_factory=dict)
+
+
+class TimeMachineParams(BaseModel):
+    """The only lever a time machine has.
+
+    A model rather than two `isinstance` calls, so the bound lives with the
+    field and matches `WhatIfParams.horizon_months` exactly — the two run the
+    same straight-line projection, so a horizon one accepts and the other
+    rejects would be a bug on its own.
+    """
+
+    model_config = FINITE
+
+    horizon_months: int = Field(default=DEFAULT_TIME_MACHINE_HORIZON,
+                                ge=1, le=MAX_HORIZON_MONTHS)
+
+
+class DecisionParams(BaseModel):
+    """A purchase to evaluate. Positive, finite, and inside the money bounds."""
+
+    model_config = FINITE
+
+    price: float = Field(gt=0, le=MONEY_CEILING)
 
 
 class SimulationRecord(BaseModel):
@@ -70,15 +94,22 @@ def _run(db, payload: SimulationIn) -> Any:
         return run_what_if(twin, params, goal=goal)
 
     if payload.kind == "time_machine":
-        horizon = payload.params.get("horizon_months", DEFAULT_TIME_MACHINE_HORIZON)
-        if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
-            raise _bad_params("horizon_months must be a positive integer")
-        return compare_paths(twin, horizon)
+        # Validated by the schema rather than by hand. The hand-written
+        # version checked `isinstance(int)` and `> 0` and stopped there, so an
+        # arbitrary-precision integer passed it and raised OverflowError deep
+        # in the engine. `TimeMachineParams` carries the same bound as
+        # `WhatIfParams`, because it is the same projection.
+        try:
+            params = TimeMachineParams(**payload.params)
+        except ValidationError as exc:
+            raise _bad_params(f"invalid time_machine params: {exc.errors()}") from exc
+        return compare_paths(twin, params.horizon_months)
 
-    price = payload.params.get("price")
-    if not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
-        raise _bad_params("decision params need a positive 'price'")
-    return evaluate_purchase(twin, float(price))
+    try:
+        decision = DecisionParams(**payload.params)
+    except ValidationError as exc:
+        raise _bad_params(f"invalid decision params: {exc.errors()}") from exc
+    return evaluate_purchase(twin, decision.price)
 
 
 def _as_jsonable(result: Any) -> Any:

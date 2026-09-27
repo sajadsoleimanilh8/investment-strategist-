@@ -24,6 +24,7 @@ decision rather than a default worth shipping.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -169,19 +170,36 @@ async def callback(provider_name: str, request: Request, db: DbSession,
     if not code:
         return _fail("state")
 
+    # Both of the next two are synchronous and this handler is `async`, so
+    # running them inline would block the event loop — the provider round trip
+    # for up to ten seconds, and the database for as long as it takes. Every
+    # other route in this app is a plain `def` and therefore already runs in a
+    # worker thread; this one has to be `async` because Starlette's form
+    # parsing is (Apple posts its callback rather than redirecting to it), so
+    # it has to hand the blocking work over itself. The bot does the same thing
+    # for the same reason (`asyncio.to_thread` throughout `app/bot/handlers`).
+    #
+    # What was at stake: one sign-in stalled every connected live-price
+    # WebSocket and every other request in the process for the length of a
+    # provider's response.
     try:
-        identity = _exchange_code(provider, code=code, verifier=state.get("v", ""))
+        identity = await asyncio.to_thread(
+            _exchange_code, provider, code=code, verifier=state.get("v", ""))
     except (IdentityError, httpx.HTTPError) as exc:
         log.warning("oauth: %s sign-in failed: %s", provider_name, exc)
         return _fail("provider")
 
-    try:
+    def _resolve():
         user, created = identities_repo.resolve(
             db, provider=provider.name, subject=identity.subject, email=identity.email
         )
+        db.commit()
+        return user, created
+
+    try:
+        user, created = await asyncio.to_thread(_resolve)
     except identities_repo.NoAddressError:
         return _fail("no_email")
-    db.commit()
     log.info("oauth: %s signed in via %s (new account: %s)",
              user.id, provider.name, created)
 

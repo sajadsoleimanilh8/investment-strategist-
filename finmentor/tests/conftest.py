@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401  registers every table on Base.metadata
+from app.db import guards
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app as fastapi_app
@@ -82,6 +83,21 @@ def guard_destructive_target(url: str) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """The limiter holds a module-level Redis client and an in-process counter.
+
+    Both are deliberate (one connection pool rather than one per request, and
+    a fallback that survives Redis being down), and both are state that would
+    otherwise carry from one test into the next.
+    """
+    from app.core import limits
+
+    limits.reset()
+    yield
+    limits.reset()
+
+
 @pytest.fixture
 def db_engine():
     url = database_url_for_tests()
@@ -107,10 +123,22 @@ def db_engine():
         engine.dispose()
 
 
+def _test_session_factory(db_engine):
+    """A session factory for the suite.
+
+    The write guards are not attached here: `app.db.guards` registers them on
+    the `Session` class at import, so every session in the process has them,
+    including these. Attaching them per factory is what they used to do, and
+    it did not work — SQLAlchemy keys its event registry on `id()`, and a
+    factory built per test lands on the address of a collected one often
+    enough that the guard was absent from about half the suite.
+    """
+    return sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
+
+
 @pytest.fixture
 def db(db_engine) -> Session:
-    factory = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
-    with factory() as session:
+    with _test_session_factory(db_engine)() as session:
         yield session
 
 
@@ -123,7 +151,7 @@ def bot_db(db_engine, monkeypatch):
     """
     import app.bot.context as bot_context
 
-    factory = sessionmaker(bind=db_engine, autoflush=False, expire_on_commit=False)
+    factory = _test_session_factory(db_engine)
     monkeypatch.setattr(bot_context, "SessionLocal", factory)
     return factory
 
@@ -157,6 +185,13 @@ def client(db, current_user, monkeypatch) -> TestClient:
 
     The guard itself is tested for real in `tests/api/test_auth.py`, which uses
     `raw_client`, mints real tokens, and asserts the 401s and cross-user 403s.
+
+    Because this fixture switches ownership off, no test that uses it can ever
+    see an ownership bug — and `PUT /api/goals/{goal_id}` shipped unguarded on
+    exactly that blind spot. `tests/api/test_ownership.py` is what closes it:
+    it walks the router tree, demands that every route naming a record be
+    guarded or declared, and drives the declared ones with two real users. If
+    you add a route taking a resource id, that file is the one that will fail.
     """
     from app.api import deps
 

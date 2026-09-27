@@ -33,6 +33,21 @@ def create_web_user(db: Session, *, email: str, password_hash: str,
     return user
 
 
+def end_sessions(db: Session, user: User) -> User:
+    """Invalidate every token this user currently holds.
+
+    Bumping `token_version` is the whole mechanism: every access and refresh
+    token carries the version it was minted under, and `tokens_still_valid`
+    refuses one whose version no longer matches. Nothing has to be stored or
+    searched, and there is no window — a counter changes atomically, unlike a
+    timestamp cutoff, which cannot separate a reset from a session started in
+    the same second as it.
+    """
+    user.token_version += 1
+    db.flush()
+    return user
+
+
 def set_password(db: Session, user: User, password_hash: str) -> User:
     user.password_hash = password_hash
     db.flush()

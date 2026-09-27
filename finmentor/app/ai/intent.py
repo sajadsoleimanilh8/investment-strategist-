@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from app.schemas.simulation import WhatIfParams
 from app.services.education_engine import TOPICS
 
@@ -119,6 +121,23 @@ def _is_negative_direction(lowered: str) -> bool:
                                             "decrease", "reduce"))
 
 
+def _levers(matched: list[str], **levers) -> tuple[WhatIfParams | None, list[str]]:
+    """Build the params, or report that this sentence names no usable scenario.
+
+    `WhatIfParams` bounds every lever (see app/schemas/simulation.py), and a
+    question can name a number outside them: "what if my income went up
+    999999%". That is not a scenario the engine can project, and it is not an
+    error either — the sentence was read, it just does not describe anything
+    computable. Returning None sends it to the conversational path, which is
+    where every other unreadable message already goes. Letting the
+    ValidationError escape would turn a typo into a 500.
+    """
+    try:
+        return WhatIfParams(**levers), matched
+    except ValidationError:
+        return None, []
+
+
 def _what_if_params(lowered: str) -> tuple[WhatIfParams | None, list[str]]:
     """Fill the levers this sentence actually names. First strong lever wins."""
     percent = parse_percent(lowered)
@@ -129,24 +148,20 @@ def _what_if_params(lowered: str) -> tuple[WhatIfParams | None, list[str]]:
     for category in _EXPENSE_CATEGORIES:
         if category in lowered and amount is not None:
             signed = -amount if negative else amount
-            return WhatIfParams(expense_category_delta={category: signed}), [
-                "expense_category_delta", category
-            ]
+            return _levers(["expense_category_delta", category],
+                           expense_category_delta={category: signed})
 
     if percent is not None:
         if any(word in lowered for word in ("income", "salary", "earn", "raise")):
-            return WhatIfParams(income_pct_delta=-percent if negative else percent), [
-                "income_pct_delta"
-            ]
+            return _levers(["income_pct_delta"],
+                           income_pct_delta=-percent if negative else percent)
         if any(word in lowered for word in ("expense", "spend", "spending", "cost")):
-            return WhatIfParams(expense_pct_delta=-percent if negative else percent), [
-                "expense_pct_delta"
-            ]
+            return _levers(["expense_pct_delta"],
+                           expense_pct_delta=-percent if negative else percent)
 
     if amount is not None and any(word in lowered for word in ("save", "saving", "put aside")):
-        return WhatIfParams(monthly_savings_delta=-amount if negative else amount), [
-            "monthly_savings_delta"
-        ]
+        return _levers(["monthly_savings_delta"],
+                       monthly_savings_delta=-amount if negative else amount)
 
     return None, []
 

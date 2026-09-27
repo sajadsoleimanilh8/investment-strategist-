@@ -183,16 +183,61 @@ def test_a_limit_of_zero_disables_the_limiter(raw_client, monkeypatch):
     assert 429 not in codes
 
 
-def test_an_unreachable_redis_allows_the_request(raw_client, monkeypatch, caplog):
-    """The behaviour that matters most. A cache outage must not become an API
-    outage — losing the limiter is a smaller problem than losing signup."""
-    monkeypatch.setattr(settings, "auth_rate_limit_per_minute", 1)
+def test_an_unreachable_redis_never_becomes_an_api_outage(raw_client, monkeypatch, caplog):
+    """A cache outage must not take the API with it, on any bucket.
+
+    A limit high enough that the fallback counter never trips: what is being
+    asserted is that an unreachable Redis produces working requests rather
+    than 500s, not what the budget is.
+    """
+    monkeypatch.setattr(settings, "auth_rate_limit_per_minute", 100)
     monkeypatch.setattr(settings, "redis_url", "redis://127.0.0.1:1/0")
 
     codes = [signup(raw_client, index).status_code for index in range(4)]
 
-    assert 429 not in codes
+    assert all(code < 500 for code in codes), codes
     assert any("rate limiter unavailable" in record.message for record in caplog.records)
+
+
+def test_a_cost_bucket_fails_open_when_redis_is_down(raw_client, monkeypatch):
+    """Losing the limiter on /ask costs money. Losing the API costs the product.
+
+    So `ask` keeps the original trade: with no Redis, the request goes
+    through.
+    """
+    from app.core import limits
+
+    monkeypatch.setattr(settings, "redis_url", "redis://127.0.0.1:1/0")
+
+    assert all(limits.allow("ask", "42", 1) for _ in range(5))
+
+
+def test_the_auth_bucket_stays_bounded_when_redis_is_down(monkeypatch):
+    """The one bucket where failing open *is* the hole.
+
+    An unlimited retry loop against login is not a cost, it is the attack. So
+    `auth` falls back to an in-process counter rather than to no counter:
+    weaker than Redis, since it is per-process and resets on restart, but a
+    bound rather than none.
+    """
+    from app.core import limits
+
+    monkeypatch.setattr(settings, "redis_url", "redis://127.0.0.1:1/0")
+
+    verdicts = [limits.allow("auth", "198.51.100.4", 3) for _ in range(6)]
+
+    assert verdicts == [True, True, True, False, False, False]
+
+
+def test_the_in_process_fallback_is_per_identity(monkeypatch):
+    """One address exhausting its budget must not lock out everybody else."""
+    from app.core import limits
+
+    monkeypatch.setattr(settings, "redis_url", "redis://127.0.0.1:1/0")
+    for _ in range(5):
+        limits.allow("auth", "198.51.100.4", 2)
+
+    assert limits.allow("auth", "203.0.113.9", 2) is True
 
 
 def test_the_limiter_never_leaks_a_credential_into_its_key():

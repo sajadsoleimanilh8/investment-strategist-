@@ -159,3 +159,96 @@ def test_an_access_token_in_a_payload_is_masked():
     masked = redact({"access_token": "eyJhbGciOiJIUzI1NiJ9.abc.def"})
 
     assert "eyJhbGci" not in str(masked)
+
+
+# --- the browser's content policy ---------------------------------------
+#
+# The app keeps a 14-day refresh token in localStorage. That is a deliberate
+# trade (see web/src/api/client.ts) and it only holds while a script cannot be
+# injected, which is what the CSP is for. These parse the directive out of the
+# nginx config and assert on its contents rather than on its spelling, so
+# reordering or reformatting the header does not fail the build but weakening
+# it does.
+#
+# The policy was verified against the built bundle before it shipped: the
+# landing page, the asset switcher's inline `style={{transform}}`, the
+# stylesheet and the data: grain texture all render with zero violations. That
+# is why `style-src` has no 'unsafe-inline' — React applies inline styles
+# through the CSSOM, which CSP does not govern.
+
+NGINX_CONF = APP_DIR.parent / "web" / "nginx.conf"
+
+
+def _csp_directives() -> dict[str, list[str]]:
+    import re
+
+    conf = NGINX_CONF.read_text(encoding="utf-8")
+    match = re.search(r'add_header Content-Security-Policy "(.+?)" always;', conf, re.S)
+    assert match, "no Content-Security-Policy header in web/nginx.conf"
+
+    directives = {}
+    for part in match.group(1).split(";"):
+        tokens = part.split()
+        if tokens:
+            directives[tokens[0]] = tokens[1:]
+    return directives
+
+
+@pytest.mark.parametrize("directive,expected", [
+    ("default-src", ["'self'"]),
+    ("script-src", ["'self'"]),
+    ("style-src", ["'self'"]),
+    ("font-src", ["'self'"]),
+    ("frame-ancestors", ["'none'"]),
+    ("base-uri", ["'none'"]),
+    ("object-src", ["'none'"]),
+    ("form-action", ["'self'"]),
+])
+def test_the_csp_locks_each_directive_down(directive, expected):
+    assert _csp_directives().get(directive) == expected
+
+
+def test_the_csp_allows_the_one_data_uri_the_design_uses():
+    """cinema.css draws its grain plate from an inline SVG turbulence filter.
+    A CSS background image is governed by img-src, not by style-src."""
+    assert _csp_directives().get("img-src") == ["'self'", "data:"]
+
+
+def test_the_csp_never_allows_unsafe_sources():
+    """'unsafe-inline' or 'unsafe-eval' anywhere would undo most of this.
+
+    Neither is needed: the built index.html carries no inline script or style,
+    and the bundle contains no eval.
+    """
+    for directive, sources in _csp_directives().items():
+        for unsafe in ("'unsafe-inline'", "'unsafe-eval'", "*", "data:"):
+            if unsafe == "data:" and directive == "img-src":
+                continue                       # the grain plate, above
+            assert unsafe not in sources, f"{directive} allows {unsafe}"
+
+
+def test_connect_src_is_templated_rather_than_wildcarded():
+    """The API origin differs per deployment, which is a reason to substitute
+    it at start-up, not a reason to allow every origin."""
+    sources = _csp_directives()["connect-src"]
+
+    assert sources == ["${CSP_CONNECT_SRC}"], sources
+    dockerfile = (APP_DIR.parent / "web" / "Dockerfile").read_text(encoding="utf-8")
+    assert "CSP_CONNECT_SRC=" in dockerfile, "the template has no default value"
+    # Without the filter, envsubst also blanks nginx's own $uri and $host and
+    # the SPA fallback stops working.
+    assert "NGINX_ENVSUBST_FILTER=CSP_" in dockerfile
+
+
+def test_the_web_server_bounds_a_request_body():
+    assert "client_max_body_size" in NGINX_CONF.read_text(encoding="utf-8")
+
+
+def test_hsts_is_left_to_the_tls_terminator_and_says_so():
+    """Set on a plain-http server it is ignored, and getting it wrong pins
+    every visitor to https for a year. The config has to explain that rather
+    than just omit it."""
+    conf = NGINX_CONF.read_text(encoding="utf-8")
+
+    assert "Strict-Transport-Security" in conf
+    assert "add_header Strict-Transport-Security" not in conf

@@ -19,7 +19,7 @@ import { FormError } from "../components/FormError";
 import { useAuth } from "../auth/AuthContext";
 import { EXPENSE_CATEGORIES, type ExpenseBreakdown } from "../api/types";
 
-const STEPS = ["Income", "Spending", "Position", "First goal"] as const;
+const STEPS = ["Income", "Spending", "Plan", "Position", "First goal"] as const;
 
 const EMPTY_EXPENSES: ExpenseBreakdown = {
   housing: 0, food: 0, transportation: 0, education: 0,
@@ -40,6 +40,10 @@ export function Onboarding() {
   const [income, setIncome] = useState("");
   const [incomeType, setIncomeType] = useState("fixed");
   const [expenses, setExpenses] = useState<Record<string, string>>({});
+  // Null until they opt in. A row of zeroes would read as "I plan to
+  // spend nothing", which is a different claim to "I have no plan".
+  const [plannedBudget, setPlannedBudget] =
+    useState<Record<string, string> | null>(null);
   const [savings, setSavings] = useState("");
   const [debt, setDebt] = useState("");
   const [debtPayment, setDebtPayment] = useState("");
@@ -61,7 +65,7 @@ export function Onboarding() {
       setError("Income needs to be a number above zero.");
       return;
     }
-    if (step === 2 && [savings, debt, debtPayment, emergencyFund]
+    if (step === 3 && [savings, debt, debtPayment, emergencyFund]
         .some((value) => toNumber(value) < 0)) {
       setError("These cannot be negative.");
       return;
@@ -90,6 +94,13 @@ export function Onboarding() {
         monthly_debt_payment: toNumber(debtPayment),
         emergency_fund: toNumber(emergencyFund),
         risk_profile: riskProfile,
+        planned_budget:
+          plannedBudget === null
+            ? null
+            : EXPENSE_CATEGORIES.reduce(
+                (all, key) => ({ ...all, [key]: toNumber(plannedBudget[key] ?? "") }),
+                { ...EMPTY_EXPENSES },
+              ),
       });
 
       if (goalName.trim() && toNumber(goalTarget) > 0) {
@@ -170,6 +181,44 @@ export function Onboarding() {
         )}
 
         {step === 2 && (
+          <fieldset className="grid-2">
+            <legend>What you meant to spend (optional)</legend>
+            <p className="field span-2">
+              <label className="inline">
+                <input
+                  type="checkbox"
+                  checked={plannedBudget !== null}
+                  onChange={(e) =>
+                    // Seeded from the previous step: a plan almost always
+                    // starts as "roughly what I spend, adjusted".
+                    setPlannedBudget(e.target.checked ? { ...expenses } : null)
+                  }
+                />{" "}
+                Compare my spending against a plan
+              </label>
+              <small>
+                Skip this and the budget part of your score stays neutral
+                rather than counting against you. You can set it later.
+              </small>
+            </p>
+
+            {plannedBudget !== null &&
+              EXPENSE_CATEGORIES.map((category) => (
+                <Field
+                  key={`plan-${category}`}
+                  id={`plan-${category}`}
+                  label={category[0].toUpperCase() + category.slice(1)}
+                  inputMode="numeric"
+                  value={plannedBudget[category] ?? ""}
+                  onChange={(e) =>
+                    setPlannedBudget({ ...plannedBudget, [category]: e.target.value })
+                  }
+                />
+              ))}
+          </fieldset>
+        )}
+
+        {step === 3 && (
           <fieldset>
             <legend>Where you stand</legend>
             <Field label="Total savings" inputMode="numeric" value={savings}
@@ -197,7 +246,7 @@ export function Onboarding() {
           </fieldset>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <fieldset>
             <legend>Something to aim at (optional)</legend>
             <Field label="What are you saving for?" value={goalName}

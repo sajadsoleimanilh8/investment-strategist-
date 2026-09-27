@@ -23,7 +23,23 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 
 COPY --from=build /build/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# A template, not a finished config: the entrypoint runs envsubst over
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/ before nginx starts.
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+
+# Restrict the substitution to `CSP_` names. Without this, envsubst would also
+# replace nginx's own `$uri` and `$host` with empty strings and the try_files
+# rule would stop serving the SPA — which is the classic way this feature
+# breaks a working config.
+ENV NGINX_ENVSUBST_FILTER=CSP_
+
+# Where the browser is allowed to send requests: the API over http(s) and the
+# live-price socket over ws(s). The default matches the compose stack, whose
+# browser-facing API is localhost:8000. A single-origin deployment (the API
+# serving the built SPA) narrows this to `'self'`; a split-origin one names
+# the API host explicitly. It is deliberately not `*`.
+ENV CSP_CONNECT_SRC="'self' http://localhost:8000 ws://localhost:8000"
 
 EXPOSE 80
 

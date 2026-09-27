@@ -46,8 +46,17 @@ def append_turn(
     answer: str,
     intent: str,
     source: str,
+    max_turns: int | None = None,
 ) -> ChatSession:
-    """Append one exchange to the user's transcript. The caller commits."""
+    """Append one exchange to the user's transcript, oldest dropped first.
+
+    The cap is not about the reply. The assistant only ever sees the last few
+    turns, so the rest is history nobody reads — but this function rewrites
+    the whole JSON document on every question, which makes an uncapped
+    transcript cost a little more forever and eventually returns a very large
+    body from `GET /ai/transcript`. Trimming here keeps that bounded without
+    changing a single answer.
+    """
     session = get_or_create(db, user_id)
     turns = read_transcript(session)
     turns.append({
@@ -57,6 +66,8 @@ def append_turn(
         "intent": intent,
         "source": source,
     })
+    if max_turns is not None and len(turns) > max_turns:
+        turns = turns[-max_turns:]
     session.transcript_json = json.dumps(turns, ensure_ascii=False)
     db.flush()
     return session

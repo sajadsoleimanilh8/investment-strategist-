@@ -111,12 +111,28 @@ def refresh(payload: RefreshIn, db: DbSession) -> TokenPair:
 # this; the pinned one asserts at import, so the container would not start.
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT,
              response_class=Response)
-def logout():
-    """Nothing to do server-side: the client drops its tokens.
+def logout(user: CurrentUser, db: DbSession):
+    """End every session this account has.
 
-    Kept as a route so the client has one place to call, and so adding a
-    revocation list later does not change the frontend.
+    It used to do nothing at all, and the client dropping its own tokens was
+    the whole of "sign out". That left the refresh token valid for its full
+    fourteen days: a token copied off a shared machine kept working long after
+    the person who owned it had pressed the button that was supposed to stop
+    exactly that.
+
+    The mechanism already existed for password resets, so this uses it rather
+    than inventing a second one. The consequence is worth being plain about:
+    it signs the account out **everywhere**, not only in this browser. That is
+    the honest reading of "sign out" for a product with no device list, and
+    the alternative — a per-token denylist — would make correctness depend on
+    Redis being reachable, which the rate limiter deliberately does not.
+
+    Requires a valid access token, which costs nothing in practice: the web
+    client refreshes and retries on a 401 before giving up, so a session that
+    can be ended is one this route sees.
     """
+    users_repo.end_sessions(db, user)
+    db.commit()
 
 
 @router.get("/me", response_model=MeOut)

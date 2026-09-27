@@ -1,20 +1,57 @@
-"""Pydantic I/O contracts for the financial engine. English field names only."""
+"""Pydantic I/O contracts for the financial engine. English field names only.
+
+Two rules every money field here obeys, both of them about what must never
+reach the engine rather than about what a person might plausibly type.
+
+**No infinities, no NaN.** Python's `json.loads` accepts the non-standard
+`Infinity` and `NaN` literals, and Pydantic's float validator lets them
+through by default — `inf >= 0` is true, so `Field(ge=0)` is no defence. An
+infinite income reaches `derive_figures`, `inf - inf` produces NaN, and the
+NaN is written to a `double precision` column where it poisons every later
+read of that account. `MONEY` and `allow_inf_nan=False` close that off at the
+edge, which is the only place it can be closed once.
+
+**A ceiling as well as a floor.** `MONEY_CEILING` is not a judgement about
+anybody's salary; it is the point past which float arithmetic stops being
+worth trusting and a projection over 600 months can still be represented
+exactly. It sits far above any real figure in this product's currency.
+"""
 from __future__ import annotations
 
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
+#: Well above any real figure, well below the range where multiplying by a
+#: 600-month horizon loses precision.
+MONEY_CEILING = 1e12
+
+#: The shape every money field takes: finite, not negative, bounded.
+MONEY = Field(default=0.0, ge=0, le=MONEY_CEILING)
+
+#: Rejects `Infinity`, `-Infinity` and `NaN` on every field of the model.
+FINITE = ConfigDict(allow_inf_nan=False)
+
 
 class ExpenseBreakdown(BaseModel):
-    housing: float = 0
-    food: float = 0
-    transportation: float = 0
-    education: float = 0
-    bills: float = 0
-    entertainment: float = 0
-    shopping: float = 0
-    other: float = 0
+    """One month's spending per category.
+
+    Bounded like every other money field. Nothing in the product produces a
+    negative category total: `apply_scenario` already floors each scaled
+    category at zero before constructing one of these, so `ge=0` refuses
+    input nobody legitimately sends rather than narrowing a real case.
+    """
+
+    model_config = FINITE
+
+    housing: float = MONEY
+    food: float = MONEY
+    transportation: float = MONEY
+    education: float = MONEY
+    bills: float = MONEY
+    entertainment: float = MONEY
+    shopping: float = MONEY
+    other: float = MONEY
 
     def total(self) -> float:
         return sum(self.model_dump().values())
@@ -24,13 +61,15 @@ class ExpenseBreakdown(BaseModel):
 
 
 class FinancialProfileIn(BaseModel):
-    monthly_income: float = Field(ge=0)
+    model_config = FINITE
+
+    monthly_income: float = Field(ge=0, le=MONEY_CEILING)
     income_type: str = "fixed"          # fixed|variable|mixed
     expenses: ExpenseBreakdown = ExpenseBreakdown()
-    current_savings: float = Field(default=0, ge=0)
-    debt: float = Field(default=0, ge=0)
-    monthly_debt_payment: float = Field(default=0, ge=0)
-    emergency_fund: float = Field(default=0, ge=0)
+    current_savings: float = MONEY
+    debt: float = MONEY
+    monthly_debt_payment: float = MONEY
+    emergency_fund: float = MONEY
     risk_profile: str = "moderate"      # conservative|moderate|aggressive
     # What the user intended to spend per category. None until they set one;
     # it is the baseline for the budget-stability score.
@@ -38,11 +77,26 @@ class FinancialProfileIn(BaseModel):
 
 
 class GoalIn(BaseModel):
+    model_config = FINITE
+
     name: str = Field(min_length=1, max_length=120)
-    target_amount: float = Field(gt=0)
-    current_amount: float = Field(default=0, ge=0)
+    target_amount: float = Field(gt=0, le=MONEY_CEILING)
+    current_amount: float = Field(default=0, ge=0, le=MONEY_CEILING)
     deadline: date | None = None
     priority: int = Field(default=3, ge=1, le=5)   # 1 = highest
+
+
+class GoalUpdate(GoalIn):
+    """PUT /api/goals/{goal_id} — a replace, plus the archive switch.
+
+    `is_active` is optional rather than defaulted so that omitting it leaves
+    the goal's current state alone. The web client declared this field long
+    before the API honoured it, which made the TypeScript a promise nothing
+    kept: a caller could send `is_active: false` and watch the goal stay in
+    the list.
+    """
+
+    is_active: bool | None = None
 
 
 class GoalCreate(GoalIn):
@@ -64,6 +118,10 @@ class GoalOut(GoalIn):
 
 class FinancialTwinOut(BaseModel):
     income: float
+    #: Carried so a client can send back what it was given. Without it the
+    #: profile form had nothing to seed from and defaulted to "fixed", which
+    #: silently reset the field on every save — see `Profile.tsx`.
+    income_type: str = "fixed"
     expenses: ExpenseBreakdown = ExpenseBreakdown()
     planned_budget: ExpenseBreakdown | None = None
     monthly_expenses: float

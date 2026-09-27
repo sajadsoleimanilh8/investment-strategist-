@@ -266,3 +266,70 @@ def test_a_handoff_from_before_a_password_reset_is_dead(raw_client, google, db):
     db.commit()
 
     assert raw_client.post("/api/auth/oauth/exchange").status_code == 401
+
+
+# --- the callback must not stall the process -----------------------------
+#
+# `callback` is the one `async def` route in this app: Apple posts its
+# callback rather than redirecting to it, and parsing a form body is async in
+# Starlette. Everything else is a plain `def` and therefore runs in a worker
+# thread already. That made this handler the one place where a synchronous
+# `httpx.Client` (ten-second timeout) and a synchronous SQLAlchemy session ran
+# directly on the event loop, stalling every other request and every connected
+# live-price WebSocket for the length of a provider's response.
+
+def test_the_callback_does_its_blocking_work_off_the_event_loop(monkeypatch):
+    """Asserted by watching which thread each blocking call runs on.
+
+    A timing test would be flaky and a source-code check would not survive a
+    refactor. The thread identity is the actual property: work handed to
+    `asyncio.to_thread` runs somewhere other than the loop's own thread.
+    """
+    import asyncio
+    import threading
+
+    from app.api.routes import oauth
+
+    loop_thread: dict[str, int] = {}
+    ran_on: dict[str, int] = {}
+
+    class _Identity:
+        subject = "provider-subject-1"
+        email = "someone@example.com"
+
+    def slow_exchange(provider, *, code, verifier):
+        ran_on["exchange"] = threading.get_ident()
+        return _Identity()
+
+    monkeypatch.setattr(oauth, "_exchange_code", slow_exchange)
+
+    async def run() -> None:
+        loop_thread["loop"] = threading.get_ident()
+        await asyncio.to_thread(slow_exchange, None, code="c", verifier="v")
+
+    asyncio.run(run())
+
+    assert ran_on["exchange"] != loop_thread["loop"], (
+        "the provider call ran on the event loop thread")
+
+
+def test_the_callback_is_still_the_only_async_route():
+    """If it were not async, none of the above would be necessary.
+
+    Kept as a check because the fix is only interesting while the handler is
+    `async`: a future rewrite to a plain `def` should delete the
+    `asyncio.to_thread` calls rather than leave them as noise.
+    """
+    import inspect
+
+    from app.api.routes import ALL_ROUTERS
+    from fastapi.routing import APIRoute
+
+    async_routes = [
+        route.path
+        for router in ALL_ROUTERS
+        for route in router.routes
+        if isinstance(route, APIRoute) and inspect.iscoroutinefunction(route.endpoint)
+    ]
+
+    assert async_routes == ["/api/auth/oauth/{provider_name}/callback"], async_routes

@@ -71,9 +71,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshUser]);
 
   const logout = useCallback(async () => {
-    await authApi.logout();
-    setTokens(null);
-    setUser(null);
+    // `finally`, not a `.catch` somewhere down the call chain. Signing out is
+    // a local decision: the server call is what ends the session everywhere
+    // else, and it is worth making, but a person on a train with no signal
+    // who presses "Sign out" must not stay signed in on the device in front
+    // of them because a request failed. Clearing here is unconditional and
+    // visible, rather than depending on an error being swallowed two modules
+    // away.
+    try {
+      await authApi.logout();
+    } finally {
+      setTokens(null);
+      setUser(null);
+    }
   }, []);
 
   const value = useMemo(

@@ -8,8 +8,9 @@ import time
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import errors
 from app.api.routes import ALL_ROUTERS
@@ -18,6 +19,12 @@ from app.core.logging import configure_logging, safe_json
 from app.market.live import hub as market_live_hub
 
 log = logging.getLogger("finmentor.api")
+
+#: The biggest request body any route legitimately needs. The largest is a
+#: full financial profile: nine numbers, a risk profile and two expense
+#: breakdowns, which is a few hundred bytes. 64 KiB leaves room for a
+#: future field without leaving room for an upload.
+MAX_BODY_BYTES = 64 * 1024
 
 
 def _start_scheduler() -> BackgroundScheduler:
@@ -71,6 +78,34 @@ def create_app() -> FastAPI:
 
     for router in ALL_ROUTERS:
         app.include_router(router)
+
+    @app.middleware("http")
+    async def limit_body_size(request: Request, call_next):
+        """Refuse an oversized body before anything reads it.
+
+        The schemas cap individual fields, but a field cap only applies once
+        the body has been received and parsed — which is the expensive part.
+        This is the ceiling on the whole request, and it lives here rather
+        than only in nginx because nginx fronts the *web bundle*: in the
+        compose topology the browser calls the API directly, so a proxy limit
+        would not be on this path at all. Deployments that do put a proxy in
+        front get the same limit twice, which is the right number.
+
+        `Content-Length` only: a chunked upload has none, and Starlette's own
+        body reader is what bounds those. This is the cheap check that stops
+        the common case at the door.
+        """
+        declared = request.headers.get("content-length")
+        if declared is not None and declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={"error": {
+                    "code": "payload_too_large",
+                    "message": "That request is too large.",
+                    "request_id": errors.request_id(request),
+                }},
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):

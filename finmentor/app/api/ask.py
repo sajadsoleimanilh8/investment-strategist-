@@ -20,8 +20,71 @@ from app.ai import synthesizer
 from app.ai.local_llm import LocalLLMUnavailable
 from app.ai.safety import FINANCE_DISCLAIMER
 from app.api.deps import CAPABILITIES, build_ai_context, build_chat_snapshot, load_user
+from app.core import limits
+from app.core.config import settings
 from app.repositories import chat as chat_repo
-from app.schemas.ai import AskResponse
+from app.schemas.ai import MAX_QUESTION_LENGTH, AskResponse
+
+class AskRefused(Exception):
+    """The question will not be answered, and the caller should say why.
+
+    Carries an HTTP status because both surfaces need to distinguish "too
+    long" from "too often", and one of them speaks HTTP. The bot ignores the
+    number and shows `message`.
+    """
+
+    status_code = 400
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class QuestionTooLong(AskRefused):
+    status_code = 422
+
+
+class AskingTooFast(AskRefused):
+    status_code = 429
+
+
+#: How many exchanges a transcript keeps.
+#:
+#: `append_turn` reads the whole JSON document, appends one turn and rewrites
+#: it, so an uncapped transcript costs a little more on every question forever
+#: — and `GET /ai/transcript` returns all of it in one body. The prompt only
+#: ever sees the last few turns (`ai_chat_history_turns`), so nothing the
+#: assistant does depends on the rest; this is about the row, not the reply.
+MAX_TRANSCRIPT_TURNS = 100
+
+
+def guard(db, user_id: int, question: str) -> str:
+    """Everything that must be true before a question costs anything.
+
+    In the pipeline rather than on the route, which is the whole point. The
+    HTTP route had a length cap and a per-user budget; the Telegram bot called
+    this same function and had neither, so one Telegram account could drive
+    unlimited model calls and unlimited transcript growth. Both surfaces now
+    pass through here because there is no longer a way to reach the model that
+    does not.
+
+    Returns the cleaned question so a caller cannot accidentally use the raw
+    one.
+    """
+    cleaned = (question or "").strip()
+    if not cleaned:
+        raise QuestionTooLong("Ask me something and I will have a go.")
+    if len(cleaned) > MAX_QUESTION_LENGTH:
+        raise QuestionTooLong(
+            f"That question is longer than I can read ({len(cleaned)} characters; "
+            f"the limit is {MAX_QUESTION_LENGTH}). Try the short version."
+        )
+    if not limits.allow("ask", str(user_id), settings.ask_rate_limit_per_minute):
+        raise AskingTooFast(
+            "You are asking faster than I can think — give it a moment."
+        )
+    return cleaned
+
 
 #: The floor when there is no model at all. A message the parser could not read
 #: normally goes to the guide (see `_chat_answer`); this is what the user gets
@@ -38,11 +101,13 @@ CAPABILITY_ANSWER = (
 def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
     """Answer one question and record the exchange. Commits.
 
-    Raises 404 only for a user who does not exist; anything else missing is
+    Raises 404 only for a user who does not exist, and `AskRefused` for a
+    question that is too long or too frequent. Anything else missing is
     reported inside the answer, because "I do not have that" is a better reply
     than an error the user cannot act on.
     """
     load_user(db, user_id)
+    question = guard(db, user_id, question)
     parsed = intent_parser.parse(question)
 
     if parsed.unparsed:
@@ -61,6 +126,7 @@ def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
         db, user_id,
         question=question, answer=answer.text,
         intent="chat" if parsed.unparsed else parsed.intent, source=answer.source,
+        max_turns=MAX_TRANSCRIPT_TURNS,
     )
     db.commit()
     return answer

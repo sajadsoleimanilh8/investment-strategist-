@@ -35,7 +35,22 @@ def upsert(
     *,
     period: str | None = None,
 ) -> FinancialProfile:
-    """Create or update the user's profile, its expense records, and risk profile."""
+    """Create or update the user's profile, its expense records, and risk profile.
+
+    A PUT here is a replace, which is the right shape for a form that shows
+    every field. `planned_budget` is the exception, and it has to be: it is
+    the only field with no input on the profile form, so a client that simply
+    round-trips what it was given omits it every time. Replacing it with the
+    resulting `None` erased the plan on the first save, and the
+    budget-stability component silently fell back to its neutral 12/20 for
+    good.
+
+    So absence and null are read as different things. `model_fields_set`
+    holds the names the request actually carried: a payload that mentions
+    `planned_budget` gets what it asked for, including an explicit null to
+    clear the plan, and a payload that says nothing about it leaves the
+    stored plan alone.
+    """
     profile = get_by_user(db, user.id)
     if profile is None:
         profile = FinancialProfile(user_id=user.id)
@@ -47,9 +62,12 @@ def upsert(
     profile.debt = data.debt
     profile.monthly_debt_payment = data.monthly_debt_payment
     profile.emergency_fund = data.emergency_fund
-    profile.planned_budget_json = (
-        json.dumps(data.planned_budget.model_dump()) if data.planned_budget else None
-    )
+    if "planned_budget" in data.model_fields_set:
+        # Said something about it, so do what they said — including clearing
+        # it with an explicit null.
+        profile.planned_budget_json = (
+            json.dumps(data.planned_budget.model_dump()) if data.planned_budget else None
+        )
     user.risk_profile = data.risk_profile
 
     replace_expenses(db, user.id, data.expenses, period=period)

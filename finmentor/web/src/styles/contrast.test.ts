@@ -11,7 +11,7 @@
  * changes a token without re-checking it. That is the whole point: a palette
  * edit is cheap, and this is what stops a cheap edit being a regression.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -24,17 +24,31 @@ const read = (path: string) => readFileSync(join(here, path), "utf8");
 
 const css = read("layout.css");
 
-/** Every file that can put a colour or a font on the screen. The token block
- * lives in layout.css, but the rules that *use* it do not, and the web-font
- * ban below is only worth anything if it covers the places a font has
- * actually been added before: landing.css and index.html both carried Google
- * Fonts links at one point. */
-const ALL_STYLESHEETS: Record<string, string> = {
-  "layout.css": css,
-  "landing.css": read("landing.css"),
-  "motion.css": read("motion.css"),
-  "index.html": read("../../index.html"),
-};
+/**
+ * Every file that can put a colour or a font on the screen — **discovered**,
+ * not listed.
+ *
+ * It was a hand-written list of three stylesheets, and `cinema.css` was added
+ * to the app without being added to it, so eight hundred lines of new CSS sat
+ * outside the web-font ban and the colour checks below. A list is exactly the
+ * wrong shape for a guard like this: the file you forget to add is the file
+ * that needed checking.
+ *
+ * So the directory is read instead. A new stylesheet is covered the moment it
+ * is saved, by nobody remembering anything. `index.html` is included by hand
+ * because it is not in this directory and has carried a Google Fonts link
+ * before.
+ */
+function everyStylesheet(): Record<string, string> {
+  const files = readdirSync(here)
+    .filter((name) => name.endsWith(".css"))
+    .sort();
+  const sheets: Record<string, string> = { "index.html": read("../../index.html") };
+  for (const name of files) sheets[name] = read(name);
+  return sheets;
+}
+
+const ALL_STYLESHEETS: Record<string, string> = everyStylesheet();
 
 /** WCAG 2.1: 4.5:1 for body text. Nothing here relies on the 3:1 large-text
  * allowance — the ramp clears the body floor everywhere, at every size. */

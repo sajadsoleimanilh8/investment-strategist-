@@ -61,6 +61,7 @@ def build_twin(profile: FinancialProfileIn, goals: list[GoalIn] | None = None) -
     )
     return FinancialTwinOut(
         income=profile.monthly_income,
+        income_type=profile.income_type,
         expenses=profile.expenses,
         planned_budget=profile.planned_budget,
         monthly_expenses=figures.monthly_expenses,
