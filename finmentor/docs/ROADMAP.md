@@ -360,6 +360,13 @@ and three providers you can arrive with.
 
 ### What is left at the end of the project
 
+> **This section describes the end of the *build*, not the current state of
+> the project.** It was accurate when phases 0-10 closed. An end-to-end audit
+> on 2026-09-22 opened a remediation workstream that is still running, so what
+> is genuinely outstanding today lives in
+> [`PROJECT_STATE.md`](PROJECT_STATE.md). The item below remains true and is
+> repeated there.
+
 One thing, needing a human with network access:
 
 1. **The live-API checks in `docs/PRE_DEPLOY.md`** (above).

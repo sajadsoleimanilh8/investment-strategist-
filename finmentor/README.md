@@ -33,6 +33,8 @@ one env var, see [`docs/ROADMAP.md`](docs/ROADMAP.md) for why), and the
 Postgres test suite now refuses to run against anything that isn't obviously
 a test database.
 
+- **Where it stands now: [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)**
+  — what is active, decided, blocked, and learned. Read this first.
 - Full spec: [`docs/SPEC.md`](docs/SPEC.md)
 - Phase plan: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
