@@ -17,7 +17,7 @@ exist and remain authoritative for their own purposes:
 Git holds the history. This file holds only what a fresh reader needs in order
 to act correctly today.
 
-Last updated against commit `4da8b68`.
+Last updated against commit `4da8b68` plus Phase 3 (uncommitted at time of writing).
 
 ---
 
@@ -46,7 +46,7 @@ the build phases in `ROADMAP.md`.
 |---|---|---|
 | 1 | Critical and pre-deployment | **DONE** (`4da8b68`) |
 | 2 | Core product and security | **DONE** (`4da8b68`) |
-| 3 | Performance and architecture | **PLANNED**, partially absorbed |
+| 3 | Performance and architecture | **DONE** (`P1`-`P7`) |
 | 4 | Security hardening | **ACTIVE**, partially done |
 | 5 | Product completeness | **PLANNED** |
 
@@ -72,19 +72,29 @@ test confirmed to fail.
   off the event loop; `income_type` preserved; error boundary; skip link;
   contrast test now discovers stylesheets.
 
-### Phase 3 — PLANNED, two items already absorbed
+### Phase 3 — DONE
 
-Completed early because Phase 2 work touched the same code:
-
-- **P2 (per-request Redis client)** — done. `app/core/limits.py` holds one
-  module-level lazy client.
-- **P8 (auth fail-open)**, listed under Phase 4 as S8 — done. The `auth`
-  bucket falls back to an in-process counter.
-
-Still open: P1 goals N+1 (`_to_out` builds a twin per goal), P3 memoise
-`OllamaProvider`, P4 retention for `market_snapshots` / `simulations` /
-`password_resets`, P5 scheduler placement and refresh interval, P6 Ollama
-timeout and concurrency, P7 duplicate sentence split in `scrub_directives`.
+- **P1 goals N+1.** `_to_out` built a Financial Twin per goal and `load_twin`
+  lists the user's goals itself, so the cost grew as the square of the number
+  of goals. The twin is now built once per list. Measured: 12 goals went from
+  **62 queries to 7**. `tests/api/test_query_counts.py` asserts the shape of
+  the cost rather than a number, so an unrelated refactor does not fail it.
+- **P2 per-request Redis client** — absorbed into Phase 2. `app/core/limits.py`
+  holds one module-level lazy client.
+- **P3 provider reuse.** `get_local_provider()` built a fresh `OllamaProvider`
+  every call, which made its 30-second availability cache dead code and opened
+  a connection per request. Memoised, with a kept-alive `requests.Session`.
+- **P4 retention.** `scripts/prune_records.py` bounds `market_snapshots`,
+  `password_resets` and `simulations`, scheduled daily.
+- **P5 scheduling.** The refresh ran at exactly the cache TTL, which is the one
+  interval that guarantees a stale window every cycle; it now runs at
+  `MARKET_REFRESH_FRACTION` of it. Both jobs sit behind a Redis lease so
+  replicas do the work once.
+- **P6 model concurrency.** The 60-second timeout is now 20, and
+  `LOCAL_LLM_MAX_CONCURRENCY` caps generations in flight. Past the cap a caller
+  is refused immediately and drops to the deterministic tier rather than
+  holding a threadpool worker behind a saturated model.
+- **P7** duplicate sentence split in `scrub_directives` removed.
 
 ### Phase 4 — ACTIVE
 
@@ -129,6 +139,18 @@ reopens it.
    and the Telegram bot only translate its refusal.
 7. **The rate limiter fails open for `ask` and closed for `auth`.** Losing the
    limiter on `/ask` costs money; losing it on authentication is the attack.
+8. **A model generation past the concurrency ceiling is refused, not queued.**
+   Waiting for a slot holds a threadpool worker for the length of somebody
+   else's generation, which is the stall the ceiling exists to prevent.
+   `LocalLLMUnavailable` is a signal the AI layer already handles, so the
+   caller gets verified figures instead of a wait.
+9. **Scheduled jobs run without a lease when Redis is unreachable.** Duplicated
+   work is a cost; no work at all is an outage, and this project deploys one
+   API container. Same direction as the `ask` limiter.
+10. **Retention for `simulations` is a runaway guard, not a policy.** The
+    default (500 per user) is far above anything the product can reach, and the
+    newest runs are never removed. Deleting a user's own saved runs is an
+    owner decision; the number is a setting.
 
 ---
 

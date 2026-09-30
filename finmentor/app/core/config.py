@@ -80,6 +80,38 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = "demo"
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"
     market_cache_ttl_seconds: int = 3600
+    #: How much of the TTL may elapse before the refresh job runs.
+    #:
+    #: The job used to be scheduled at exactly `market_cache_ttl_seconds`,
+    #: which is the one interval guaranteed to leave a gap: a snapshot goes
+    #: stale at the same moment the run that would replace it is due, so every
+    #: cycle had a window where requests fell through to a provider. Refreshing
+    #: at half the TTL means the cache is replaced while it is still valid.
+    market_refresh_fraction: float = 0.5
+    #: Whether this process may run the scheduled jobs.
+    #:
+    #: `ENABLE_SCHEDULER` is per process, so two replicas with it on means two
+    #: copies of every job and twice the provider traffic. When Redis is
+    #: reachable the replicas take a short lease and only the holder runs, so
+    #: leaving this on everywhere is safe. Without Redis it falls back to
+    #: "whoever has it on", which is correct for the single-replica case this
+    #: project actually deploys.
+    scheduler_lease_seconds: int = 300
+
+    # retention -------------------------------------------------------------
+    #: `market_snapshots` is a cache and only its newest row per symbol is
+    #: ever read. A few are kept so a deployment can see what it held.
+    retention_market_snapshots_per_symbol: int = 5
+    #: How long after expiry a spent reset row is kept. It exists so a second
+    #: use of a link is refused rather than read as "no such token", which
+    #: matters while the link might still be in an inbox and not after.
+    retention_password_reset_days: int = 7
+    #: The user's own saved runs, so this is a runaway guard rather than a
+    #: retention policy: the list endpoint pages at 100 and a person runs a
+    #: handful. The number is the owner's to change. 0 disables it.
+    retention_simulations_per_user: int = 500
+    #: How often the retention job runs. Daily: nothing here is urgent.
+    retention_interval_seconds: int = 86_400
     stock_watchlist: list[str] = Field(default_factory=lambda: ["AAPL", "MSFT", "TSLA", "NVDA"])
     crypto_watchlist: list[str] = Field(default_factory=lambda: ["bitcoin", "ethereum", "solana"])
 
@@ -94,6 +126,25 @@ class Settings(BaseSettings):
     #: deeper answer finish, low enough that a rambling one still gets cut off
     #: rather than reaching 400+ tokens.
     ai_max_tokens: int = 300
+    #: Seconds to wait on one model generation.
+    #:
+    #: Was a flat 60. `/ai/ask` is a synchronous route, so it runs in
+    #: Starlette's threadpool (40 workers by default), and a worker is held
+    #: for the whole call. Forty slow generations therefore stalled every
+    #: other route in the process, `/healthz` included — which fails the
+    #: container healthcheck and restarts a container that was only busy.
+    #: Twenty seconds is long enough for a 7B to finish a 300-token answer
+    #: and short enough that a hung server costs a worker for a third of a
+    #: minute rather than a full one.
+    local_llm_timeout_seconds: float = 20.0
+    #: How many model generations may be in flight at once.
+    #:
+    #: The real fix for the above: a ceiling that is independent of how many
+    #: threadpool workers happen to exist. Past it, a request is refused
+    #: quickly instead of queueing behind a model that is already saturated —
+    #: Ollama serialises requests internally anyway, so the queue bought
+    #: latency rather than throughput. 0 disables the ceiling.
+    local_llm_max_concurrency: int = 4
     #: how many past turns the free-chat path may see. Only the chat path has
     #: history at all — the precise paths (health, what-if, decision, market,
     #: education) stay stateless so the same question always gets the same
@@ -125,6 +176,21 @@ class Settings(BaseSettings):
         default_factory=lambda: {"needs": 0.5, "wants": 0.3, "savings": 0.2}
     )
 
+
+    @property
+    def market_refresh_interval_seconds(self) -> int:
+        """How often to refresh the market cache.
+
+        A fraction of the TTL, never the TTL itself. Scheduling the refresh at
+        exactly the freshness window means a snapshot expires at the same
+        moment its replacement is due, so there is always a gap in which
+        requests fall through to a provider — which is the thing SPEC section
+        24 says must not happen once warm.
+
+        Floored at one second so a misconfigured fraction cannot produce a
+        zero-interval job that spins.
+        """
+        return max(1, int(self.market_cache_ttl_seconds * self.market_refresh_fraction))
 
     @property
     def effective_market_live_source(self) -> str:

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from app.api import errors
 from app.api.routes import ALL_ROUTERS
+from app.core import leader
 from app.core.config import settings
 from app.core.logging import configure_logging, safe_json
 from app.market.live import hub as market_live_hub
@@ -28,20 +29,48 @@ MAX_BODY_BYTES = 64 * 1024
 
 
 def _start_scheduler() -> BackgroundScheduler:
-    """Warm the market cache on an interval so no request waits on a provider."""
+    """The background jobs: warm the market cache, and keep three tables bounded.
+
+    Two things here are not obvious from the calls.
+
+    The refresh interval is a *fraction* of the cache TTL, never the TTL
+    itself. Scheduling it at exactly the freshness window guarantees a gap:
+    the snapshot expires at the same moment its replacement is due, so every
+    cycle had a stretch where requests fell through to a provider, which is
+    the thing SPEC section 24 says must not happen once warm.
+
+    Both jobs run behind a lease, so a deployment with several replicas does
+    the work once rather than once per container. Without Redis every replica
+    runs, which is right for the single-container deployment this project
+    ships: duplicated work is a cost, no work at all is an outage.
+    """
     from scripts.fetch_market_snapshots import main as refresh_snapshots
+    from scripts.prune_records import main as prune_records
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(
-        refresh_snapshots,
+        lambda: leader.run_if_leader("market_snapshots", refresh_snapshots),
         "interval",
-        seconds=settings.market_cache_ttl_seconds,
+        seconds=settings.market_refresh_interval_seconds,
         id="market_snapshots",
         max_instances=1,
         coalesce=True,          # a slow run must not queue up duplicates
     )
+    scheduler.add_job(
+        lambda: leader.run_if_leader("retention", prune_records),
+        "interval",
+        seconds=settings.retention_interval_seconds,
+        id="retention",
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.start()
-    log.info("market refresh scheduled every %ss", settings.market_cache_ttl_seconds)
+    log.info(
+        "scheduled: market refresh every %ss (cache ttl %ss), retention every %ss",
+        settings.market_refresh_interval_seconds,
+        settings.market_cache_ttl_seconds,
+        settings.retention_interval_seconds,
+    )
     return scheduler
 
 

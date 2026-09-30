@@ -5,12 +5,32 @@ no external network beyond the machine the model runs on.
 part of the context it was handed, so a pipeline test can prove the context
 actually reached the model. `LOCAL_LLM_PROVIDER=fake` selects it — tests never
 touch a live model.
+
+Two properties of the Ollama provider are worth stating here, because both
+were absent and neither is visible from a single call.
+
+**One provider, reused.** `get_local_provider()` used to construct a fresh
+`OllamaProvider` every call, which made its availability cache dead code — the
+TTL was per instance, so nothing ever hit it — and opened a new TCP connection
+per request to a server that is usually on the same machine. The provider is
+now memoised and holds a `requests.Session`.
+
+**A ceiling on concurrent generations.** `/ai/ask` is a synchronous route and
+occupies a threadpool worker for the whole generation. Without a ceiling,
+enough slow calls stall every other route in the process, `/healthz` included,
+which turns a busy API into a restarting one. Ollama serialises requests
+internally, so queueing past the ceiling bought latency rather than
+throughput; past it the caller is refused quickly and drops to the
+deterministic tier, which is a plainer answer rather than no answer.
 """
 from __future__ import annotations
 
 import json
 import re
+import threading
 import time
+from contextlib import contextmanager
+from functools import lru_cache
 
 import requests
 
@@ -19,6 +39,44 @@ from app.core.config import settings
 
 #: how long an `available()` result is trusted before re-checking the server
 AVAILABILITY_TTL_SECONDS = 30.0
+
+
+class _Gate:
+    """A ceiling on concurrent generations that never blocks.
+
+    `slot` either takes one or says no immediately. Waiting would reintroduce
+    exactly what the ceiling exists to prevent: a worker held for the length
+    of somebody else's generation.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._in_flight = 0
+
+    @property
+    def in_flight(self) -> int:
+        return self._in_flight
+
+    @contextmanager
+    def slot(self, limit: int):
+        if limit <= 0:                       # disabled
+            yield True
+            return
+        with self._lock:
+            taken = self._in_flight < limit
+            if taken:
+                self._in_flight += 1
+        try:
+            yield taken
+        finally:
+            if taken:
+                with self._lock:
+                    self._in_flight -= 1
+
+
+#: Module-level: the ceiling belongs to the process talking to one model
+#: server, not to any single provider object.
+_gate = _Gate()
 
 
 class LocalLLMUnavailable(Exception):
@@ -33,6 +91,9 @@ class OllamaProvider:
     def __init__(self) -> None:
         self._available_until = 0.0
         self._available = False
+        # Kept alive between calls. Ollama usually runs on this machine, so a
+        # fresh connection per request is pure overhead on a hot path.
+        self._session = requests.Session()
 
     def available(self) -> bool:
         """True only if the server answers AND the configured model is installed.
@@ -46,7 +107,7 @@ class OllamaProvider:
             return self._available
 
         try:
-            response = requests.get(f"{settings.ollama_host}/api/tags", timeout=2)
+            response = self._session.get(f"{settings.ollama_host}/api/tags", timeout=2)
             response.raise_for_status()
             installed = {model.get("name", "") for model in response.json().get("models", [])}
             wanted = settings.local_llm_model
@@ -62,27 +123,39 @@ class OllamaProvider:
         return self._available
 
     def generate(self, prompt: str, system: str | None = None) -> str:
-        try:
-            response = requests.post(
-                f"{settings.ollama_host}/api/chat",
-                json={
-                    "model": settings.local_llm_model,
-                    "messages": [
-                        {"role": "system", "content": system or SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": settings.local_llm_temperature,
-                        "num_predict": settings.ai_max_tokens,
+        with _gate.slot(settings.local_llm_max_concurrency) as taken:
+            if not taken:
+                # Refused rather than queued. `LocalLLMUnavailable` is the
+                # signal the whole AI layer already handles: the caller drops
+                # to the deterministic tier and the user gets their verified
+                # figures instead of waiting behind a saturated model.
+                raise LocalLLMUnavailable(
+                    f"{settings.local_llm_max_concurrency} generations already "
+                    "in flight"
+                )
+            try:
+                response = self._session.post(
+                    f"{settings.ollama_host}/api/chat",
+                    json={
+                        "model": settings.local_llm_model,
+                        "messages": [
+                            {"role": "system", "content": system or SYSTEM_PROMPT},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "stream": False,
+                        "options": {
+                            "temperature": settings.local_llm_temperature,
+                            "num_predict": settings.ai_max_tokens,
+                        },
                     },
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            text = response.json()["message"]["content"].strip()
-        except Exception as exc:  # noqa: BLE001
-            raise LocalLLMUnavailable(str(exc)) from exc
+                    timeout=settings.local_llm_timeout_seconds,
+                )
+                response.raise_for_status()
+                text = response.json()["message"]["content"].strip()
+            except LocalLLMUnavailable:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise LocalLLMUnavailable(str(exc)) from exc
 
         if not text:
             raise LocalLLMUnavailable("the model returned an empty response")
@@ -157,8 +230,29 @@ def _leaf_figures(context: dict, prefix: str = "") -> list[tuple[str, object]]:
     return figures
 
 
+@lru_cache(maxsize=1)
+def _ollama() -> OllamaProvider:
+    """The one Ollama provider for this process.
+
+    Memoised so its availability cache and its HTTP session survive between
+    requests. A fresh instance per call made both useless: the 30-second TTL
+    was per object, so it never once prevented a re-probe.
+    """
+    return OllamaProvider()
+
+
+def reset_provider_cache() -> None:
+    """Drop the memoised provider. For tests that switch configuration."""
+    _ollama.cache_clear()
+
+
 def get_local_provider():
-    """The configured local provider. `fake` keeps tests off a live model."""
+    """The configured local provider. `fake` keeps tests off a live model.
+
+    The fake is built per call on purpose: it is stateless apart from a
+    deliberate class-level switch, and tests construct it directly to
+    exercise the model-down tier.
+    """
     if settings.local_llm_provider == "fake":
         return FakeLocalProvider()
-    return OllamaProvider()
+    return _ollama()

@@ -91,10 +91,16 @@ def split_sentences(text: str) -> list[str]:
 
 
 def scrub_directives(text: str) -> tuple[str, bool]:
-    """Drop any sentence that instructs the user to trade. Returns (text, changed)."""
-    kept = [s for s in split_sentences(text) if not _BUY_SELL_RE.search(s)]
+    """Drop any sentence that instructs the user to trade. Returns (text, changed).
+
+    Split once and compare against that, rather than splitting a second time
+    to count what came in. Two splits of the same string can only ever agree,
+    so the second was pure cost on a function that runs on every answer.
+    """
+    sentences = split_sentences(text)
+    kept = [s for s in sentences if not _BUY_SELL_RE.search(s)]
     cleaned = " ".join(kept).strip()
-    changed = len(kept) != len(split_sentences(text))
+    changed = len(kept) != len(sentences)
     if changed and not cleaned:
         cleaned = "I can explain what your numbers mean, but I do not give buy or sell advice."
     return cleaned, changed
