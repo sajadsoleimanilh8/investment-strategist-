@@ -11,7 +11,7 @@ user refreshes, and it costs nothing.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, DbSession, auth_rate_limit
@@ -78,7 +78,17 @@ def signup(payload: SignupIn, db: DbSession) -> TokenPair:
              dependencies=[Depends(auth_rate_limit)])
 def login(payload: LoginIn, db: DbSession) -> TokenPair:
     user = users_repo.get_by_email(db, payload.email)
-    if user is None or not security.verify_password(payload.password, user.password_hash):
+    # Verified before the `user is None` test, and deliberately not inside a
+    # short-circuit. `verify_password` falls back to a dummy hash when there
+    # is nothing to check against, so an unknown address costs the same
+    # argon2 verification as a wrong password. Written the obvious way
+    # (`user is None or not verify(...)`), Python never calls `verify` for an
+    # unknown address and the route answers in a fraction of the time — the
+    # same oracle `BAD_CREDENTIALS` exists to close, read off the clock
+    # instead of off the message.
+    password_ok = security.verify_password(
+        payload.password, user.password_hash if user else None)
+    if user is None or not password_ok:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, BAD_CREDENTIALS)
 
     if security.needs_rehash(user.password_hash):
@@ -161,7 +171,8 @@ only changes when the link is used."""
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED,
              dependencies=[Depends(auth_rate_limit)])
-def forgot_password(payload: ForgotPasswordIn, db: DbSession) -> dict[str, str]:
+def forgot_password(payload: ForgotPasswordIn, db: DbSession,
+                    background: BackgroundTasks) -> dict[str, str]:
     """Send a reset link, and say the same thing either way.
 
     202 and one sentence whether or not the address is registered. Anything
@@ -170,8 +181,20 @@ def forgot_password(payload: ForgotPasswordIn, db: DbSession) -> dict[str, str]:
     to an attacker than it sounds: it is the first half of credential
     stuffing, and it is a disclosure the person never agreed to.
 
-    The send itself is best-effort (`send_quietly`). A mail outage must not
-    become a 500 on one address and a 202 on another.
+    The send itself is best-effort (`send_quietly`) and happens *after* the
+    response. A mail outage must not become a 500 on one address and a 202 on
+    another, and an SMTP connection must not be on this path at all: it took
+    up to ten seconds for a registered address and zero for an unregistered
+    one, which is the same disclosure this route's single sentence exists to
+    prevent, read off the clock rather than off the message. Moving it to a
+    background task removes the whole of that gap.
+
+    What remains is one `UPDATE` and one `INSERT` for a known address against
+    none for an unknown one, which is a couple of milliseconds rather than a
+    couple of seconds. Stated rather than hidden: it is a far smaller signal
+    and it is not zero. Closing it properly means writing a row for an
+    unknown address too, which is a database full of rows for addresses
+    nobody has — a worse trade than the one it buys.
     """
     user = users_repo.get_by_email(db, payload.email)
     if user is not None and user.email:
@@ -181,11 +204,15 @@ def forgot_password(payload: ForgotPasswordIn, db: DbSession) -> dict[str, str]:
         raw, hashed = security.new_reset_token()
         resets_repo.create(db, user_id=user.id, token_hash=hashed)
         db.commit()
-        send_quietly(Message(
-            to=user.email,
-            subject="Reset your FinMentor password",
-            body=_reset_email(f"{settings.web_base_url}/reset-password?token={raw}"),
-        ))
+        background.add_task(
+            send_quietly,
+            Message(
+                to=user.email,
+                subject="Reset your FinMentor password",
+                body=_reset_email(
+                    f"{settings.web_base_url}/reset-password?token={raw}"),
+            ),
+        )
     return {"message": RESET_SENT}
 
 

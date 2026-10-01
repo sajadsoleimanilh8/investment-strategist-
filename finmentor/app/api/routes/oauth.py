@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import secrets
 from datetime import timedelta
 
 import httpx
@@ -33,7 +35,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import DbSession, auth_rate_limit
-from app.core import security
+from app.core import nonce, security
 from app.core.config import settings
 from app.oauth import registry
 from app.oauth.base import IdentityError, OAuthProvider
@@ -125,16 +127,41 @@ def start(provider_name: str, next: str = "/dashboard") -> RedirectResponse:
     )
 
 
+#: Characters a browser removes from a URL before resolving it. They have to
+#: be stripped before the path is judged, or `/<TAB>/evil.com` passes a check
+#: for "does not start with //" and then becomes `//evil.com` in the address
+#: bar — approved as a path, resolved as a host.
+_URL_IGNORED = re.compile(r"[\t\r\n]")
+
+
 def _safe_next(next: str) -> str:
     """A path inside this app, or the dashboard.
 
-    Anything with a scheme or a host is refused: `?next=https://elsewhere` is
-    how a trusted sign-in link becomes a redirect to somebody else's copy of
-    the login page.
+    Anything that can resolve to another origin is refused:
+    `?next=https://elsewhere` is how a trusted sign-in link becomes a redirect
+    to somebody else's copy of the login page.
+
+    Three ways a string that looks like a path is not one, and all three are
+    checked here:
+
+    * `//evil.com` is protocol-relative. It starts with a slash and goes to
+      another host.
+    * `/\\evil.com` is the same thing: browsers normalise a backslash to a
+      forward slash in the authority position, so this was accepted by the
+      original "does not start with //" test and resolved off-site anyway.
+    * `/<TAB>/evil.com` becomes `//evil.com` once the browser strips the
+      characters it ignores, which it does *after* this function has run.
+
+    `web/src/auth/safeNext.ts` carries the same rule for the client, and
+    `tests/api/test_oauth_routes.py` asserts the two agree case for case —
+    a redirect guard that holds on one side only is not a guard.
     """
-    if not next.startswith("/") or next.startswith("//"):
+    candidate = _URL_IGNORED.sub("", next or "")
+    if not candidate.startswith("/"):
         return "/dashboard"
-    return next
+    if len(candidate) > 1 and candidate[1] in "/\\":
+        return "/dashboard"
+    return candidate
 
 
 @router.api_route("/{provider_name}/callback", methods=["GET", "POST"])
@@ -204,7 +231,11 @@ async def callback(provider_name: str, request: Request, db: DbSession,
              user.id, provider.name, created)
 
     handoff = security.sign_payload(
-        {"sub": str(user.id), "ver": user.token_version},
+        # `jti` is what makes this spendable once. Without it the cookie was
+        # cleared on use and the token was not, so anything that captured it
+        # could trade it for a full token pair until it expired.
+        {"sub": str(user.id), "ver": user.token_version,
+         "jti": secrets.token_urlsafe(16)},
         kind=security.HANDOFF, lifetime=HANDOFF_TTL,
     )
     response = RedirectResponse(
@@ -246,6 +277,13 @@ def exchange(db: DbSession, response: Response,
     The cookie is cleared on the way out whatever happens: it is single use by
     intent, and leaving a spent one in the jar is a credential sitting around
     for no reason.
+
+    Clearing the cookie is not the same as spending the token, which is what
+    this used to rely on. The token is signed and stateless, so a copy taken
+    from anywhere the browser had been — a shared machine, a proxy log, an
+    extension — stayed valid for its full sixty seconds no matter what this
+    route did to the jar. `jti` plus `nonce.spend` makes the first exchange
+    the only one.
     """
     response.delete_cookie(HANDOFF_COOKIE, path="/api/auth/oauth")
 
@@ -255,6 +293,14 @@ def exchange(db: DbSession, response: Response,
         claims = security.read_payload(finmentor_handoff, kind=security.HANDOFF)
     except security.TokenError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
+
+    # Burned before the user is loaded, so a replay is refused whether or not
+    # the account still exists. Remembered only for the token's own lifetime:
+    # past that the signature check refuses it anyway.
+    if not nonce.spend(claims.get("jti", ""),
+                       ttl_seconds=int(HANDOFF_TTL.total_seconds())):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                            "that sign-in has already been used")
 
     from app.repositories import users as users_repo
     user = users_repo.get(db, int(claims["sub"]))

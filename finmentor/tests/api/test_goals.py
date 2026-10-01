@@ -4,9 +4,18 @@ from datetime import date
 import pytest
 
 from app.repositories import goals as goals_repo
+from app.repositories import profiles as profiles_repo
 from app.services.goal_engine import add_months
 
-PERIOD = "2026-09"
+#: The expense period the profile is filed under.
+#:
+#: The current month, not a literal. It was `"2026-09"`, which agreed with the
+#: calendar for as long as the calendar said September and then silently
+#: stopped: `load_twin` reads the *current* period, so from October onward the
+#: twin saw no expenses at all, monthly savings jumped from 10.5M to 28.5M,
+#: and every ETA in this file moved. A fixed string in a fixture that is
+#: compared against `date.today()` is a test with an expiry date on it.
+PERIOD = profiles_repo.current_period()
 PROFILE_BODY = {
     "monthly_income": 30_000_000,
     "expenses": {"housing": 8_000_000, "food": 5_000_000, "transportation": 2_000_000,

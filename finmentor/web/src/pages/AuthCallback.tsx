@@ -17,6 +17,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { exchangeOAuth } from "../api/auth";
 import { messageFor } from "../components/AsyncBoundary";
 import { useAuth } from "../auth/AuthContext";
+import { safeNext } from "../auth/safeNext";
 
 export function AuthCallback() {
   const [params] = useSearchParams();
@@ -36,8 +37,11 @@ export function AuthCallback() {
       try {
         await exchangeOAuth();
         await refreshUser();
-        const next = params.get("next") ?? "/dashboard";
-        navigate(next.startsWith("/") ? next : "/dashboard", { replace: true });
+        // `safeNext`, not `startsWith("/")`. This page reads `next` from its
+        // own query string rather than from the signed state, so the check
+        // here is the only thing standing between a crafted callback URL and
+        // a redirect off-site. `//evil.com` starts with a slash.
+        navigate(safeNext(params.get("next")), { replace: true });
       } catch (caught) {
         setError(messageFor(caught));
       }

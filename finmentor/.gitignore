@@ -6,8 +6,25 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# bot runtime log
-bot.log
+# runtime logs. Was `bot.log` alone, which is why `bot.err.log` -- 220 KB of
+# stack traces carrying absolute developer paths -- ended up tracked. A
+# pattern rather than a list: the next log file nobody thinks to add is the
+# one that gets committed.
+*.log
+
+# coverage artefacts
+.coverage
+.coverage.*
+htmlcov/
+
+# demo recordings. Untracked rather than deleted: the files stay on disk and
+# stay in history, so nothing is lost -- but note that untracking alone does
+# not shrink a clone, because history still carries them. Reclaiming the 8 MB
+# needs a history rewrite, which is not worth doing for this.
+video/
+
+# a stray empty lockfile at the Python project root; the real one is web/
+/package-lock.json
 
 # fine-tuning: the scripts, the README and the Modelfile are committed; the
 # datasets, adapters and weights are not

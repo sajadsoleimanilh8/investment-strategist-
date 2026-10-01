@@ -60,13 +60,38 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+#: A real argon2 hash of a value nobody holds, verified against when there is
+#: no stored hash to verify against. Computed once at import, because the cost
+#: that matters is the *verify*, not the hash.
+#:
+#: Without it, `verify_password` returned False immediately for an unknown
+#: email and spent ~50ms hashing for a known one, and that difference is
+#: readable over the network. The login route says in its own constant that
+#: telling the two apart "hands an attacker a free account-existence oracle";
+#: answering with the same sentence at a measurably different speed hands over
+#: the same thing more slowly.
+_DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(32))
+
+
 def verify_password(password: str, password_hash: str | None) -> bool:
     """Constant-ish time check. A user with no password never verifies.
 
-    Telegram-only accounts have `password_hash = None`; returning False rather
-    than raising means "wrong credentials", which is what it is.
+    Telegram-only accounts have `password_hash = None`, and an unknown email
+    has no row at all. Both still pay for one argon2 verification against
+    `_DUMMY_HASH`, so the answer takes the same time as a real wrong password.
+    Returning False rather than raising means "wrong credentials", which is
+    what it is.
+
+    This is not perfect constant time and does not pretend to be: argon2's own
+    runtime varies a little, and so does the network. It removes the
+    difference an attacker can actually measure, which is the whole 50ms gap
+    between "no such account" and "wrong password".
     """
     if not password_hash:
+        try:
+            _hasher.verify(_DUMMY_HASH, password)
+        except (VerificationError, InvalidHashError):
+            pass
         return False
     try:
         return _hasher.verify(password_hash, password)

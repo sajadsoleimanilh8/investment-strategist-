@@ -22,7 +22,12 @@ services:
       POSTGRES_USER: finmentor
       POSTGRES_PASSWORD: finmentor
       POSTGRES_DB: finmentor
-    ports: ["5432:5432"]
+    # 127.0.0.1, not the bare "5432:5432" this used to be. Docker publishes a
+    # bare mapping on 0.0.0.0, so a demo run on anything that is not a laptop
+    # put a Postgres with the password `finmentor` on the network. Bound to
+    # loopback it is still reachable for the dev loop (`compose up db redis`
+    # then run the app from your shell) and not reachable from anywhere else.
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["finmentor_pg:/var/lib/postgresql/data"]
     healthcheck:                       # so `alembic upgrade head` can follow straight after
       test: ["CMD-SHELL", "pg_isready -U finmentor -d finmentor"]
@@ -32,7 +37,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    # Same reasoning as the database above, and more urgent: this Redis has no
+    # password at all, so published on 0.0.0.0 it is an open one.
+    ports: ["127.0.0.1:6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

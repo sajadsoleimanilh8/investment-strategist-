@@ -17,7 +17,7 @@ exist and remain authoritative for their own purposes:
 Git holds the history. This file holds only what a fresh reader needs in order
 to act correctly today.
 
-Last updated against commit `4da8b68` plus Phase 3 (uncommitted at time of writing).
+Last updated against commit `45b5bbd` plus Phase 4 (uncommitted at time of writing).
 
 ---
 
@@ -47,7 +47,7 @@ the build phases in `ROADMAP.md`.
 | 1 | Critical and pre-deployment | **DONE** (`4da8b68`) |
 | 2 | Core product and security | **DONE** (`4da8b68`) |
 | 3 | Performance and architecture | **DONE** (`P1`-`P7`) |
-| 4 | Security hardening | **ACTIVE**, partially done |
+| 4 | Security hardening | **DONE** (`S2`-`S8`) |
 | 5 | Product completeness | **PLANNED** |
 
 ### Phase 1 — DONE
@@ -96,12 +96,30 @@ test confirmed to fail.
   holding a threadpool worker behind a saturated model.
 - **P7** duplicate sentence split in `scrub_directives` removed.
 
-### Phase 4 — ACTIVE
+### Phase 4 — DONE
 
-Done: S2 (CSP), S8 (auth limiter).
-Open: S3 account-existence timing oracle, S4 client-side OAuth `next`
-validation, S5 single-use handoff token, S6 compose port binding, S7 tracked
-runtime logs and `.gitignore`.
+- **S2 CSP** and **S8 auth limiter** — done in earlier phases.
+- **S3 account-existence oracle.** `login` short-circuited past argon2 for an
+  unknown address, and `forgot-password` only reached SMTP for a registered
+  one. Both answered the same sentence at measurably different speeds, which
+  is the disclosure their own constants exist to prevent. A dummy hash closes
+  the login gap; the reset email moved to a background task. One `UPDATE` and
+  one `INSERT` of difference remain on the reset path, stated in the route
+  rather than hidden.
+- **S4 redirect guard.** `_safe_next` rejected `//evil.com` and accepted
+  `/\evil.com`, which browsers resolve identically, and the callback page did
+  not use the rule at all. Both sides now share one definition, with a
+  case table asserted identical across `tests/api/test_security_hardening.py`
+  and `web/src/auth/safeNext.test.ts`.
+- **S5 handoff replay.** The token was single-use by intention only: the
+  cookie was cleared and the signed token stayed valid for its full sixty
+  seconds. It now carries a `jti` burned in Redis on first exchange.
+- **S6 compose binding.** Postgres and Redis were published on `0.0.0.0` with
+  a default password and no password respectively. Both bound to loopback.
+- **S7 tracked artefacts.** `bot.err.log`, `.coverage`, a stray lockfile and
+  8 MB of demo video are untracked, and `.gitignore` uses patterns rather
+  than a list of names. Note: untracking does **not** shrink a clone, because
+  history still carries them.
 
 ### Phase 5 — PLANNED
 
@@ -191,6 +209,11 @@ Kept because they are expensive to rediscover, not as a record of what happened.
 4. **Browser automation's `form_input` bypasses React's synthetic events**, so
    values set that way never reach component state. Use it to verify rendering
    and interaction; assert request payloads with component tests instead.
+5. **A fixture with a hardcoded period expires.** `test_goals.py` pinned
+   expenses to `"2026-09"` and compared an ETA against `date.today()`. It
+   passed for as long as the calendar agreed and then broke on 1 October, as
+   `load_twin` reads the *current* period and so saw no expenses at all. Any
+   fixture date compared against today should be derived from today.
 
 ---
 
