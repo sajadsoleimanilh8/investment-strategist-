@@ -9,7 +9,7 @@ fallback to mock is tested; the live response shape is not.
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -38,7 +38,11 @@ class CoinGeckoProvider(MarketDataProvider):
             raise ValueError(f"unexpected CoinGecko response for {coin_id}")
         return [
             PricePoint(
-                date=datetime.utcfromtimestamp(ts / 1000).date().isoformat(),
+                # `fromtimestamp(..., tz=utc)`, not `utcfromtimestamp`: the
+                # latter returns a *naive* datetime that claims to be UTC,
+                # which is why it is deprecated. Same instant, honest type.
+                date=datetime.fromtimestamp(
+                    ts / 1000, tz=timezone.utc).date().isoformat(),
                 close=round(price, 2),
             )
             for ts, price in prices

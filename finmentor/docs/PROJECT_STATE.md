@@ -17,7 +17,8 @@ exist and remain authoritative for their own purposes:
 Git holds the history. This file holds only what a fresh reader needs in order
 to act correctly today.
 
-Last updated against commit `45b5bbd` plus Phase 4 (uncommitted at time of writing).
+Last updated against commit `658782a` plus the code-quality pass
+(uncommitted at time of writing).
 
 ---
 
@@ -120,6 +121,16 @@ test confirmed to fail.
   8 MB of demo video are untracked, and `.gitignore` uses patterns rather
   than a list of names. Note: untracking does **not** shrink a clone, because
   history still carries them.
+
+### Code-quality backlog — DONE
+
+The list carried alongside the five phases, now cleared: deprecated UTC
+helpers, the unused `days` argument on `store_series`, an unbounded `days`
+query parameter, duplicate OpenAPI operation ids, a missing unique constraint
+on `chat_sessions` (with a migration that deduplicates first), Alpha Vantage
+claiming crypto tickers, the stale transcript list, a confirmation before
+removing a watchlist symbol, mobile navigation, two dead components, the
+README's test counts, and `100vh` on the app shell.
 
 ### Phase 5 — PLANNED
 

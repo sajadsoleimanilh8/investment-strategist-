@@ -60,15 +60,16 @@ def get_cached_series(
     return points if len(points) >= days else None
 
 
-def store_series(db: Session, symbol: str, days: int, points: list[PricePoint]) -> None:
+def store_series(db: Session, symbol: str, points: list[PricePoint]) -> None:
     """Write a fetched series to `market_snapshots`. The caller commits.
 
     Used by the scheduled refresh, which writes every symbol and commits once.
     A single read-through write goes through `get_or_fetch`, which commits for
     itself — see the note there on why.
 
-    `days` is what was asked for; the stored series is what came back, and its
-    length is what later reads compare against.
+    It used to take a `days` argument and never read it: the stored series is
+    whatever came back, and its *length* is what later reads compare against,
+    so what was asked for is not part of the record.
     """
     market_repo.add_snapshot(
         db,
@@ -107,6 +108,6 @@ def get_or_fetch(
         return cached
 
     points = market_engine.get_series(symbol, days=days)
-    store_series(db, symbol, days, points)
+    store_series(db, symbol, points)
     db.commit()
     return points

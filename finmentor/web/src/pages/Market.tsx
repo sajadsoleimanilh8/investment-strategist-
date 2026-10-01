@@ -39,6 +39,16 @@ export function Market() {
     onSuccess: invalidate,
   });
 
+  function confirmRemove(symbol: string) {
+    // Asked because the button sits in a row of figures and is one mis-tap
+    // from "Add". Nothing is lost that cannot be re-added, so the question is
+    // short and the wording says so rather than implying a consequence the
+    // action does not have.
+    if (window.confirm(`Stop tracking ${symbol}? You can add it back any time.`)) {
+      remove.mutate(symbol);
+    }
+  }
+
   const watched = new Set(watchlist.data?.items.map((item) => item.symbol) ?? []);
 
   return (
@@ -94,7 +104,7 @@ export function Market() {
                     <td>
                       <button
                         type="button"
-                        onClick={() => remove.mutate(item.symbol)}
+                        onClick={() => confirmRemove(item.symbol)}
                         disabled={remove.isPending}
                       >
                         Remove

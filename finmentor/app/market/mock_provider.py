@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.market.base import MarketDataProvider, PricePoint, Spot
 
@@ -24,7 +24,9 @@ class MockMarketProvider(MarketDataProvider):
         start_price = rng.uniform(20, 40000)
         price = start_price
         points: list[PricePoint] = []
-        today = datetime.utcnow().date()
+        # `now(timezone.utc)`, not `utcnow()`: the latter is a naive
+        # datetime pretending to be UTC and is deprecated for it.
+        today = datetime.now(timezone.utc).date()
         for i in range(days, 0, -1):
             price = max(0.5, price * (1 + rng.uniform(-0.03, 0.035)))
             points.append(

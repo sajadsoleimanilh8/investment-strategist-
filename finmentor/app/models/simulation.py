@@ -37,7 +37,19 @@ class Simulation(Base, TimestampMixin):
 
 
 class ChatSession(Base, TimestampMixin):
+    """One per user. The AI transcript.
+
+    The uniqueness is the point. `chat_repo.get_or_create` reads the newest
+    session and creates one when there is none, so two concurrent `/ask`
+    requests could both find nothing and both insert — after which the older
+    row was unreachable, because every read takes the newer one. The
+    `order_by` hid the problem rather than preventing it.
+    """
+
     __tablename__ = "chat_sessions"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_chat_sessions_user"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

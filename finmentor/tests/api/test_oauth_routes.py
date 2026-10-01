@@ -325,11 +325,15 @@ def test_the_callback_is_still_the_only_async_route():
     from app.api.routes import ALL_ROUTERS
     from fastapi.routing import APIRoute
 
-    async_routes = [
+    # Deduplicated: the callback is declared twice, once per method, so that
+    # GET and POST get distinct OpenAPI operation ids. That is two route
+    # entries for one path and one handler, and the property being asserted
+    # is about the handler.
+    async_routes = {
         route.path
         for router in ALL_ROUTERS
         for route in router.routes
         if isinstance(route, APIRoute) and inspect.iscoroutinefunction(route.endpoint)
-    ]
+    }
 
-    assert async_routes == ["/api/auth/oauth/{provider_name}/callback"], async_routes
+    assert async_routes == {"/api/auth/oauth/{provider_name}/callback"}, async_routes

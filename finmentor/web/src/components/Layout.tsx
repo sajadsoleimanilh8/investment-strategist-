@@ -1,5 +1,5 @@
 /** Navigation and an outlet. Structure only — no visual decisions here. */
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
@@ -42,6 +42,12 @@ export function Layout({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Closed on every navigation, including the ones that do not come from a
+  // link in the menu: the back button, a redirect out of a guard, a
+  // programmatic `navigate`. Keyed on the path rather than on the click.
+  useEffect(() => setMenuOpen(false), [pathname]);
 
   async function signOut() {
     // Same reasoning as `AuthContext.logout`: the tokens are gone either way,
@@ -62,13 +68,38 @@ export function Layout({ children }: { children?: ReactNode }) {
           through all of them every time. Visible only while focused, which is
           what `.skip-link` does. */}
       <a className="skip-link" href="#main">Skip to main content</a>
-      <header>
+      <header data-menu-open={menuOpen || undefined}>
         <Link to="/dashboard"><h1>FinMentor</h1></Link>
-        <nav aria-label="Main">
+
+        {/* Below 600px the seven links wrapped to three rows and took most of
+            the first screen on every page. A disclosure instead: one control
+            that says whether it is open, and real links underneath.
+
+            `aria-expanded` and `aria-controls` rather than a styled div,
+            because a screen reader has to be able to tell that the links are
+            there and currently hidden. It is a plain button and the nav is
+            plain markup; CSS decides which of the two shapes is on screen. */}
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="main-nav"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? "Close" : "Menu"}
+        </button>
+
+        <nav id="main-nav" aria-label="Main">
           <ul>
             {LINKS.map(([to, label]) => (
               <li key={to}>
-                <NavLink to={to} end={to === "/dashboard"}>{label}</NavLink>
+                {/* Closing on navigate is the whole of the behaviour: a menu
+                    that stays open over the page you just asked for is a menu
+                    you have to dismiss twice. */}
+                <NavLink to={to} end={to === "/dashboard"}
+                         onClick={() => setMenuOpen(false)}>
+                  {label}
+                </NavLink>
               </li>
             ))}
           </ul>

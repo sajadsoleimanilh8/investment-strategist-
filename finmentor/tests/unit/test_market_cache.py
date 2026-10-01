@@ -112,7 +112,7 @@ def test_get_cached_series_reports_a_miss_rather_than_fetching(db, counting_fetc
 
 def test_store_series_round_trips_the_points(db):
     points = [PricePoint(date="2026-09-01", close=100.5, volume=1234.0)]
-    cache.store_series(db, "SOL", 1, points)
+    cache.store_series(db, "SOL", points)
 
     restored = cache.decode_points(market_repo.latest_snapshot(db, "SOL").points_json)
     assert restored == points

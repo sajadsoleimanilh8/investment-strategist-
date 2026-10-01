@@ -20,8 +20,26 @@ class AlphaVantageProvider(MarketDataProvider):
     name = "alpha_vantage"
     _URL = "https://www.alphavantage.co/query"
 
+    #: Crypto tickers that look exactly like equity tickers.
+    #:
+    #: `supports` used to be "all letters, all upper case", which is true of
+    #: BTC, ETH and SOL as well as AAPL. In production the provider list is
+    #: tried in order, so every crypto refresh spent an Alpha Vantage call —
+    #: against a free tier measured in calls per day — before failing through
+    #: to CoinGecko, which was always going to answer it.
+    #:
+    #: A list rather than a lookup, because the shape of a ticker genuinely
+    #: does not tell you what it is: `MSTR` is an equity and `BTC` is not, and
+    #: nothing about either string says so. Kept in step with
+    #: `app.market.coingecko._COMMON` and `scripts/seed_market_assets.py`.
+    _NOT_EQUITIES = frozenset({"BTC", "ETH", "SOL"})
+
     def supports(self, symbol: str) -> bool:
-        return symbol.isalpha() and symbol.isupper()
+        return (
+            symbol.isalpha()
+            and symbol.isupper()
+            and symbol not in self._NOT_EQUITIES
+        )
 
     def get_daily_series(self, symbol: str, days: int = 30) -> list[PricePoint]:
         params = {

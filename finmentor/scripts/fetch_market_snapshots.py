@@ -49,7 +49,7 @@ def refresh(db: Session, *, days: int = DEFAULT_DAYS) -> dict[str, int]:
     for symbol in symbols_to_refresh(db):
         try:
             points = market_engine.get_series(symbol, days=days)
-            cache.store_series(db, symbol, days, points)
+            cache.store_series(db, symbol, points)
             refreshed += 1
         except Exception:  # noqa: BLE001 - a bad symbol must not stop the batch
             log.exception("failed to refresh %s", symbol)

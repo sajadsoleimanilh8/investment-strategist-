@@ -11,7 +11,7 @@ what section 24 says must never sit on the request path.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.api.deps import DbSession, OwnedUserId, load_user, require_user
 from app.market import cache
@@ -28,6 +28,14 @@ router = APIRouter(prefix="/api", tags=["market"],
                    dependencies=[Depends(require_user)])
 
 DEFAULT_DAYS = 30
+
+#: A year. Past this the series is longer than any chart draws, and asking for
+#: more is a way to make one request cost a provider call plus a large JSON
+#: blob — `days` was an unbounded `int`, so `?days=100000` was a valid request.
+MAX_DAYS = 365
+
+DaysQuery = Query(default=DEFAULT_DAYS, ge=1, le=MAX_DAYS,
+                  description="how many daily closes to analyse")
 
 
 def _known_asset(db, symbol: str) -> MarketAsset:
@@ -62,7 +70,7 @@ def list_assets(db: DbSession) -> AssetListOut:
 
 
 @router.get("/market/assets/{symbol}", response_model=TrendReportOut)
-def get_asset_trend(symbol: str, db: DbSession, days: int = DEFAULT_DAYS) -> TrendReportOut:
+def get_asset_trend(symbol: str, db: DbSession, days: int = DaysQuery) -> TrendReportOut:
     asset = _known_asset(db, symbol)
     points = cache.get_or_fetch(db, asset.symbol, days=days)
     db.commit()
@@ -70,8 +78,21 @@ def get_asset_trend(symbol: str, db: DbSession, days: int = DEFAULT_DAYS) -> Tre
 
 
 @router.get("/market/watchlist/{user_id}", response_model=WatchlistOut)
-def get_watchlist(user_id: OwnedUserId, db: DbSession, days: int = DEFAULT_DAYS) -> WatchlistOut:
+def get_watchlist(user_id: OwnedUserId, db: DbSession,
+                  days: int = DaysQuery) -> WatchlistOut:
     """The user's watched symbols, ranked by recent momentum (not a forecast)."""
+    return _watchlist(db, user_id, days)
+
+
+def _watchlist(db, user_id: int, days: int) -> WatchlistOut:
+    """The ranked watchlist, as a plain function.
+
+    Separate from the route because `add_to_watchlist` wants to answer with
+    the new list and used to do it by calling the handler directly. That works
+    until a parameter grows a `Query` default, at which point the direct call
+    passes the `Query` *object* where an int belongs — a route handler is only
+    a plain function until FastAPI is the one supplying its arguments.
+    """
     load_user(db, user_id)
     reports = [
         market_engine.analyze(item.symbol, cache.get_or_fetch(db, item.symbol, days=days))
@@ -94,7 +115,7 @@ def add_to_watchlist(user_id: OwnedUserId, payload: WatchlistIn, db: DbSession) 
         )
     market_repo.add_to_watchlist(db, user_id, asset.symbol)
     db.commit()
-    return get_watchlist(user_id, db)
+    return _watchlist(db, user_id, DEFAULT_DAYS)
 
 
 @router.delete("/market/watchlist/{user_id}/{symbol}",

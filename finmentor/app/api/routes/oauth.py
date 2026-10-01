@@ -164,7 +164,19 @@ def _safe_next(next: str) -> str:
     return candidate
 
 
-@router.api_route("/{provider_name}/callback", methods=["GET", "POST"])
+# Two declarations rather than one `api_route(methods=["GET", "POST"])`.
+#
+# FastAPI registers a route per method and derives each operation id from the
+# function name, so a single handler on two methods produced the same id
+# twice: a `UserWarning` on every schema build, and a generated client with
+# two functions of the same name, one of which silently wins.
+#
+# A shared `operation_id=` does not fix that — it collides identically. They
+# have to be distinct, which means declaring the two methods separately. The
+# body is still one function, because the parameters are the same and only
+# the envelope differs.
+@router.get("/{provider_name}/callback", operation_id="oauth_callback")
+@router.post("/{provider_name}/callback", operation_id="oauth_callback_form")
 async def callback(provider_name: str, request: Request, db: DbSession,
                    _: None = Depends(auth_rate_limit)) -> RedirectResponse:
     """Where the provider sends the browser back.

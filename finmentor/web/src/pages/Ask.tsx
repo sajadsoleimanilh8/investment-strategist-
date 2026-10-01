@@ -8,7 +8,7 @@
  * know which one they got.
  */
 import { type FormEvent, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ask as askApi, transcript as transcriptApi } from "../api/ask";
 import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
@@ -32,6 +32,7 @@ const SUGGESTIONS = [
 
 export function Ask() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<{ question: string; response: AskResponse }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,11 @@ export function Ask() {
     onSuccess: (response, text) => {
       setAnswers((all) => [...all, { question: text, response }]);
       setQuestion("");
+      // The exchange that just happened is part of the transcript now, so
+      // "Earlier" is stale. Without this it kept showing the state of the
+      // conversation as of the moment the page loaded, which reads as the
+      // last question having been dropped.
+      queryClient.invalidateQueries({ queryKey: ["transcript"] });
     },
     onError: (caught) => setError(messageFor(caught)),
   });

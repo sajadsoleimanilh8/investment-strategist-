@@ -120,7 +120,11 @@
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* dvh, not vh: on a phone `100vh` is the viewport *without* the browser
+     chrome, so the page is taller than the space it has and the footer sits
+     under the address bar. The landing page already used dvh; this one had
+     been missed. */
+  min-height: 100dvh;
   gap: var(--space-4);
 }
 
@@ -144,6 +148,56 @@
 }
 
 .whoami { margin: 0 0 0 auto; display: flex; align-items: center; gap: var(--space-2); }
+
+/* ---- navigation, narrow -------------------------------------------------
+   Seven links wrapped to three rows below 600px and took most of the first
+   screen on every page. A disclosure instead. The markup is the same at both
+   sizes -- a button and a plain `nav` -- and only this block decides which
+   shape is on screen, so nothing about the accessibility tree depends on the
+   viewport. */
+
+/* Desktop: the toggle does not exist. `display: none` rather than clipping,
+   because at this width there is nothing to disclose and a control that
+   announces a collapsed menu beside an expanded one is a lie. */
+.nav-toggle { display: none; }
+
+@media (max-width: 599px) {
+  .app > header {
+    /* Two rows: the wordmark and the toggle, then the menu beneath when it
+       is open. `auto` on the first column keeps the toggle hard right. */
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    row-gap: var(--space-2);
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* The touch-target floor. The word is small; the thing you press is not. */
+    min-height: 44px;
+    min-width: 72px;
+  }
+
+  /* Collapsed by default, and genuinely gone: `display: none` takes it out of
+     the tab order, which is the behaviour `aria-expanded="false"` is
+     promising. Clipping it instead would leave seven focusable links behind a
+     control that says they are hidden. */
+  .app > header nav { display: none; grid-column: 1 / -1; }
+  .app > header[data-menu-open] nav { display: block; }
+
+  .app > header nav ul { flex-direction: column; gap: 0; }
+  .app > header nav a {
+    display: block;
+    padding: var(--space-2) 0;
+    min-height: 44px;
+  }
+
+  /* The signed-in line sits under the menu rather than competing with the
+     wordmark for the top row. */
+  .whoami { grid-column: 1 / -1; margin-inline-start: 0; }
+}
 
 main { flex: 1; padding: 0 var(--space-3); max-width: var(--measure); }
 main.wide { max-width: 68rem; }
