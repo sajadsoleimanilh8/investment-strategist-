@@ -216,3 +216,19 @@ export interface LinkCode {
   /** Null when the deployment has not been told the bot's username. */
   deep_link: string | null;
 }
+
+export interface ExpensePeriod {
+  /** YYYY-MM. */
+  period: string;
+  expenses: ExpenseBreakdown;
+  total: number;
+  /** Housing, food, transportation and bills. */
+  essential_total: number;
+}
+
+export interface ExpenseHistory {
+  /** The window asked for, so "nothing recently" and "nothing ever" differ. */
+  months: number;
+  /** Oldest first. Only months that have records: a gap is a gap, not a zero. */
+  periods: ExpensePeriod[];
+}

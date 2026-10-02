@@ -107,6 +107,60 @@ def replace_expenses(
     return records
 
 
+def period_months_ago(months: int, today: date | None = None) -> str:
+    """The `YYYY-MM` bucket `months - 1` months before this one.
+
+    `months=1` is this month, so the window always includes the current period
+    and never reaches a month that does not exist. Written with integer
+    arithmetic on a month ordinal rather than `timedelta`, because "three
+    months ago" is not a number of days and 31-day arithmetic lands on the
+    wrong month roughly a third of the year.
+    """
+    anchor = today or date.today()
+    ordinal = anchor.year * 12 + (anchor.month - 1) - (months - 1)
+    return f"{ordinal // 12:04d}-{ordinal % 12 + 1:02d}"
+
+
+def expense_history(
+    db: Session, user_id: int, *, months: int, today: date | None = None
+) -> list[tuple[str, ExpenseBreakdown, float]]:
+    """`(period, breakdown, essential_total)` per period that has records.
+
+    Ascending by period, because this is a series and a series reads forwards.
+
+    **Only periods with records appear.** A month the user never filled in is
+    absent rather than present with zeros, because zeros would assert they
+    spent nothing and what we actually have is no record. Same reasoning as
+    decision 5 in `docs/PROJECT_STATE.md`: absence is not a value.
+
+    One query, and the row count is bounded by the window rather than by how
+    long the user has been here: at most `months` x 8 categories. `period` is
+    a zero-padded `YYYY-MM` string, so a lexicographic `>=` is a chronological
+    one, and the comparison can be pushed into the database.
+    """
+    cutoff = period_months_ago(months, today)
+    rows = db.scalars(
+        select(ExpenseRecord)
+        .where(ExpenseRecord.user_id == user_id, ExpenseRecord.period >= cutoff)
+        .order_by(ExpenseRecord.period)
+    )
+
+    fields = ExpenseBreakdown.model_fields
+    buckets: dict[str, dict[str, float]] = {}
+    essential: dict[str, float] = {}
+    for row in rows:
+        if row.category not in fields:
+            continue
+        buckets.setdefault(row.period, {})[row.category] = row.amount
+        if row.category in ESSENTIAL_CATEGORIES:
+            essential[row.period] = essential.get(row.period, 0.0) + row.amount
+
+    return [
+        (period, ExpenseBreakdown(**amounts), essential.get(period, 0.0))
+        for period, amounts in sorted(buckets.items())
+    ]
+
+
 def expense_breakdown(
     db: Session, user_id: int, *, period: str | None = None
 ) -> ExpenseBreakdown:
