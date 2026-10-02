@@ -58,3 +58,46 @@ class ExpenseHistoryOut(BaseModel):
     #: in the last 3 months" from "no records at all".
     months: int
     periods: list[ExpensePeriodOut] = []
+
+
+class IncomeSignalOut(BaseModel):
+    """What the recorded income shows about how steady it is.
+
+    An observation, never a correction. `declared` is what the user set and
+    stays that way; `suggested` is what the records look like. When they
+    differ, `disagrees` is true and the client can offer the change rather
+    than making it.
+    """
+
+    periods: int
+    #: Too few periods to classify. `suggested` is then null and `disagrees`
+    #: is false: two months differing is not a pattern.
+    insufficient: bool
+    mean: float
+    low: float
+    high: float
+    #: Standard deviation over the mean. Null when the mean is zero, because
+    #: the ratio is undefined rather than large.
+    variation: float | None = None
+    #: What the user told us during onboarding.
+    declared: str
+    #: `fixed`, `variable`, `mixed`, or null when there is not enough to say.
+    suggested: str | None = None
+    disagrees: bool = False
+
+
+class IncomePeriodOut(BaseModel):
+    period: str
+    amount: float
+
+
+class IncomeHistoryOut(BaseModel):
+    """Recorded monthly income, oldest first, with what it adds up to.
+
+    Only months that have a record. A month with no record is absent rather
+    than zero: zero income is a claim and no record is not.
+    """
+
+    months: int
+    periods: list[IncomePeriodOut] = []
+    signal: IncomeSignalOut | None = None

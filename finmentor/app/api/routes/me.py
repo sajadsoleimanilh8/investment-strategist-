@@ -20,10 +20,14 @@ from app.repositories import education as education_repo
 from app.repositories import goals as goals_repo
 from app.repositories import market as market_repo
 from app.repositories import profiles as profiles_repo
-from app.schemas.me import ExpenseHistoryOut, ExpensePeriodOut, SummaryOut
+from app.schemas.me import (
+    ExpenseHistoryOut, ExpensePeriodOut, IncomeHistoryOut, IncomePeriodOut,
+    IncomeSignalOut, SummaryOut,
+)
 from app.services import market_engine
 from app.services.financial_dna import build_dna
 from app.services.goal_engine import estimated_completion, progress_pct
+from app.services import income_signal
 from app.services.health_score import compute_health_score
 
 router = APIRouter(prefix="/api/me", tags=["me"],
@@ -122,4 +126,47 @@ def expense_history(
             )
             for period, breakdown, essential in rows
         ],
+    )
+
+
+@router.get("/income/history", response_model=IncomeHistoryOut)
+def income_history(
+    user: CurrentUser,
+    db: DbSession,
+    months: int = Query(
+        default=DEFAULT_HISTORY_MONTHS, ge=1, le=MAX_HISTORY_MONTHS,
+        description="how many months back to read, including this one",
+    ),
+) -> IncomeHistoryOut:
+    """Recorded monthly income, oldest first, and what its spread suggests.
+
+    `signal` is an observation and nothing else. The profile's `income_type`
+    is what the user told us and stays that way; `suggested` is what the
+    records look like. When the two differ the client can offer the change.
+    Making it here would move figures the user did not ask to move -- and
+    today it would move none, because nothing reads `income_type` yet.
+    """
+    rows = profiles_repo.income_history(db, user.id, months=months)
+    profile = profiles_repo.get_by_user(db, user.id)
+
+    signal = None
+    if profile is not None:
+        assessed = income_signal.assess([amount for _, amount in rows])
+        signal = IncomeSignalOut(
+            periods=assessed.periods,
+            insufficient=assessed.insufficient,
+            mean=assessed.mean,
+            low=assessed.low,
+            high=assessed.high,
+            variation=assessed.variation,
+            declared=profile.income_type,
+            suggested=assessed.suggested,
+            disagrees=income_signal.disagrees_with(assessed, profile.income_type),
+        )
+
+    return IncomeHistoryOut(
+        months=months,
+        periods=[IncomePeriodOut(period=period, amount=amount)
+                 for period, amount in rows],
+        signal=signal,
     )

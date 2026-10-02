@@ -9,13 +9,15 @@ because a test is cheaper than remembering.
 from __future__ import annotations
 
 import pathlib
+import re
 
 import pytest
 
 from app.api.routes.market import MAX_DAYS
 from app.market.alpha_vantage import AlphaVantageProvider
 
-APP = pathlib.Path(__file__).resolve().parents[2] / "app"
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+APP = ROOT / "app"
 
 
 # --- APIs with an expiry date --------------------------------------------
@@ -188,3 +190,60 @@ def test_the_migration_deduplicates_before_constraining():
     assert "DELETE FROM chat_sessions" in source
     assert source.index("DELETE FROM chat_sessions") < source.index(
         "create_unique_constraint")
+
+
+# --- stray characters ----------------------------------------------------
+
+#: Scripts this codebase never writes in. It is English-only by decision
+#: (`docs/SPEC.md`), the UI copy is English, and the identifiers are ASCII, so
+#: a CJK, Hangul or Arabic character in a source file is a typo or a bad paste
+#: rather than content -- and one inside a string literal ships to a user.
+#:
+#: Added after two of them reached a file in one sitting, a U+6708 in a
+#: docstring and a U+9009 U+62E9 in a comment. Both were harmless and neither
+#: was noticed by eye, which is the argument for a test rather than for being
+#: careful.
+#:
+#: Written as code points, not as the characters themselves. The first draft
+#: of this comment quoted them, and the test failed on its own explanation --
+#: the same way the deprecated-call scan above had to tokenise rather than
+#: grep, for the same reason.
+_FOREIGN_SCRIPT = re.compile(r"[⺀-鿿가-힯؀-ۿ]")
+
+_SCANNED_SUFFIXES = (".py", ".ts", ".tsx", ".css", ".md")
+
+
+def _scanned_files():
+    for root in (ROOT / "app", ROOT / "tests", ROOT / "scripts",
+                 ROOT / "web" / "src", ROOT / "docs"):
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.suffix not in _SCANNED_SUFFIXES:
+                continue
+            # This file holds the pattern and will accumulate notes about it.
+            # Its own contents cannot reach a user, so excluding it costs
+            # nothing and spares the next person the puzzle of a scan that
+            # fails on the comment describing the scan.
+            if path.name == pathlib.Path(__file__).name:
+                continue
+            yield path
+
+
+def test_no_source_file_carries_a_stray_foreign_character():
+    offenders = []
+    for path in _scanned_files():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):  # pragma: no cover - not expected
+            continue
+        for number, line in enumerate(text.split("\n"), 1):
+            if _FOREIGN_SCRIPT.search(line):
+                offenders.append(
+                    f"{path.relative_to(ROOT).as_posix()}:{number}: {line.strip()[:80]}"
+                )
+
+    assert offenders == [], (
+        "a CJK, Hangul or Arabic character in a source file is a bad paste, "
+        "and inside a string literal it ships:\n  " + "\n  ".join(offenders)
+    )

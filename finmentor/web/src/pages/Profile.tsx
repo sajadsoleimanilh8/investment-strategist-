@@ -14,6 +14,7 @@ import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
 import { Field } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { ExpenseHistory } from "../components/ExpenseHistory";
+import { IncomeHistory } from "../components/IncomeHistory";
 import { TelegramLink } from "../components/TelegramLink";
 import { EXPENSE_CATEGORIES, type ExpenseBreakdown } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
@@ -262,6 +263,9 @@ export function Profile() {
           </form>
         )}
       </AsyncBoundary>
+
+      <hr />
+      <IncomeHistory />
 
       <hr />
       <ExpenseHistory />

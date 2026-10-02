@@ -12,7 +12,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.finance import ExpenseRecord, FinancialProfile
+from app.models.finance import ExpenseRecord, FinancialProfile, IncomeRecord
 from app.models.user import User
 from app.schemas.finance import ExpenseBreakdown, FinancialProfileIn
 
@@ -71,6 +71,7 @@ def upsert(
     user.risk_profile = data.risk_profile
 
     replace_expenses(db, user.id, data.expenses, period=period)
+    record_income(db, user.id, data.monthly_income, period=period)
     db.flush()
     return profile
 
@@ -159,6 +160,63 @@ def expense_history(
         (period, ExpenseBreakdown(**amounts), essential.get(period, 0.0))
         for period, amounts in sorted(buckets.items())
     ]
+
+
+def record_income(
+    db: Session, user_id: int, amount: float, *, period: str | None = None
+) -> IncomeRecord:
+    """File this period's income, overwriting the period if already filed.
+
+    Exactly the shape `replace_expenses` has: one row per period, rewritten
+    on each save, never appended to. That is what makes a history accumulate
+    without anybody having to maintain it, and it is why six months of
+    expenses already existed before anything read them.
+
+    `income_records` has been in the schema since the beginning with a
+    docstring calling it the signal behind `income_type = variable`, and
+    nothing ever wrote to it. This is the write.
+
+    One row per period means re-saving the profile twice in a month corrects
+    the figure rather than recording two incomes. The alternative -- a row per
+    save -- would make the variation measure a function of how often the user
+    edited their profile, which is not a property of their income.
+    """
+    period = period or current_period()
+    existing = db.scalar(
+        select(IncomeRecord).where(
+            IncomeRecord.user_id == user_id, IncomeRecord.period == period
+        ).order_by(IncomeRecord.id)
+    )
+    if existing is None:
+        existing = IncomeRecord(user_id=user_id, period=period)
+        db.add(existing)
+    existing.amount = amount
+    db.flush()
+    return existing
+
+
+def income_history(
+    db: Session, user_id: int, *, months: int, today: date | None = None
+) -> list[tuple[str, float]]:
+    """`(period, amount)` per period that has a record, oldest first.
+
+    Same contract as `expense_history`: one statement, a window-bounded row
+    count, and only the periods that exist. A month with no record is absent
+    rather than zero, because zero income is a claim and no record is not.
+    """
+    cutoff = period_months_ago(months, today)
+    rows = db.scalars(
+        select(IncomeRecord)
+        .where(IncomeRecord.user_id == user_id, IncomeRecord.period >= cutoff)
+        .order_by(IncomeRecord.period, IncomeRecord.id)
+    )
+    # One row per period is the invariant `record_income` maintains, but a
+    # database that predates it may hold more than one for a period. Last
+    # wins, which matches what `record_income` would have left behind.
+    latest: dict[str, float] = {}
+    for row in rows:
+        latest[row.period] = row.amount
+    return sorted(latest.items())
 
 
 def expense_breakdown(

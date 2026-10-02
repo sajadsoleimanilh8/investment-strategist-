@@ -232,3 +232,31 @@ export interface ExpenseHistory {
   /** Oldest first. Only months that have records: a gap is a gap, not a zero. */
   periods: ExpensePeriod[];
 }
+
+export interface IncomeSignal {
+  periods: number;
+  /** Too few periods to classify; `suggested` is then null. */
+  insufficient: boolean;
+  mean: number;
+  low: number;
+  high: number;
+  /** Standard deviation over the mean. Null when the mean is zero. */
+  variation: number | null;
+  /** What the user set in "Is it steady?". Never changed by reading this. */
+  declared: string;
+  /** What the records look like: fixed | variable | mixed, or null. */
+  suggested: string | null;
+  disagrees: boolean;
+}
+
+export interface IncomePeriod {
+  period: string;
+  amount: number;
+}
+
+export interface IncomeHistory {
+  months: number;
+  /** Oldest first. Only months with a record: a gap is a gap, not a zero. */
+  periods: IncomePeriod[];
+  signal: IncomeSignal | null;
+}
