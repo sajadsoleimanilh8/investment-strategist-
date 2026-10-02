@@ -64,6 +64,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       DEMO_MODE: "true"
       ENABLE_SCHEDULER: "true"
+      # A deployment reads its logs with a query, not with its eyes. The
+      # default is `text` because that is what somebody running uvicorn by
+      # hand wants; neither is the better default in the abstract.
+      LOG_FORMAT: json
       # A demo secret, and only usable as one: `get_settings()` refuses to
       # start with the development default unless DEMO_MODE is on.
       JWT_SECRET: demo-only-not-a-secret-generate-a-real-one-for-production

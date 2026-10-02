@@ -4,7 +4,9 @@ Run: uvicorn app.main:app --reload
 from __future__ import annotations
 
 import logging
+import re
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,10 +18,17 @@ from app.api import errors
 from app.api.routes import ALL_ROUTERS
 from app.core import leader
 from app.core.config import settings
-from app.core.logging import configure_logging, safe_json
+from app.core.logging import (
+    configure_logging, request_id_var, safe_json, scrub_text,
+)
 from app.market.live import hub as market_live_hub
 
 log = logging.getLogger("finmentor.api")
+
+#: The shape `request_id` is generated in: eight lower-case hex characters.
+#: A client may supply its own to stitch a trace together, and anything that
+#: is not this shape is replaced rather than trusted.
+_REQUEST_ID = re.compile(r"[0-9a-f]{8}")
 
 #: The biggest request body any route legitimately needs. The largest is a
 #: full financial profile: nine numbers, a risk profile and two expense
@@ -138,19 +147,68 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
-        """Access log. Bodies are never read here; query params are redacted."""
+        """Access log. Bodies are never read here; query params are redacted.
+
+        Three things happen before `call_next`, and the order is the point:
+        the request gets an id, that id goes into the context, and only then
+        is anything else allowed to log. A line emitted by the limiter or the
+        AI layer halfway through the request carries the id because of this,
+        not because those call sites know about it.
+
+        The id reaches the client on every response, not only on errors. It
+        was already on the three error bodies, which is the half of the
+        problem you notice; the other half is a user describing a request that
+        *worked* and nobody being able to find it.
+        """
+        rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:8]
+        # A client-supplied id is free-form input that will be written to a log
+        # and echoed in a header: keep only the shape we generate ourselves.
+        if not _REQUEST_ID.fullmatch(rid):
+            rid = uuid.uuid4().hex[:8]
+        request.state.request_id = rid
+        token = request_id_var.set(rid)
+
         started = time.perf_counter()
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except BaseException:
+            request_id_var.reset(token)
+            raise
         elapsed_ms = (time.perf_counter() - started) * 1000
+
+        # The matched route's template, not the path that was typed. Logging
+        # `/api/goals/7` makes every record its own distinct key -- the thing
+        # that turns an access log into an unqueryable pile -- and writes a
+        # record id into the log on the way. `route` is on the scope once
+        # routing has run, which is why this reads it after `call_next`.
+        route = request.scope.get("route")
+        template = getattr(route, "path", None) or scrub_text(request.url.path)
+
         params = dict(request.query_params)
         log.info(
             "%s %s -> %s in %.1fms%s",
-            request.method,
-            request.url.path,
-            response.status_code,
-            elapsed_ms,
+            request.method, template, response.status_code, elapsed_ms,
             f" params={safe_json(params)}" if params else "",
+            extra={
+                "event": "http_request",
+                "method": request.method,
+                "route": template,
+                "status": response.status_code,
+                "duration_ms": round(elapsed_ms, 1),
+                # The caller, when there is one. Without it the operational
+                # question "what did this person actually experience" has no
+                # answer. It does make the access log personal data, which is
+                # noted against the retention decision in PROJECT_STATE.
+                "user_id": getattr(request.state, "user_id", None),
+                # `request_id` is deliberately *not* passed here. The record
+                # factory has already set it, and `logging` raises on an
+                # `extra` key that would overwrite an existing attribute --
+                # which is why the context variable is reset after this call
+                # rather than before it.
+            },
         )
+        response.headers["X-Request-ID"] = rid
+        request_id_var.reset(token)
         return response
 
     @app.get("/healthz")

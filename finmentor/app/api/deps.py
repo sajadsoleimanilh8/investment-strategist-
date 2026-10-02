@@ -287,6 +287,7 @@ def tokens_still_valid(user: User, claims: security.TokenClaims) -> bool:
 
 
 def require_user(
+    request: Request,
     db: DbSession,
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
@@ -295,6 +296,11 @@ def require_user(
     `WWW-Authenticate` is set so a client can tell "you are not logged in"
     from "you are logged in and not allowed", which is the difference between
     showing a login form and showing an error.
+
+    Takes the `Request` only to record who the caller is, for the access log.
+    That is the one piece of request context the log cannot work out for
+    itself: it runs outside the dependency tree and sees a bearer token it has
+    no business decoding.
     """
     try:
         token = security.bearer_token(authorization)
@@ -319,6 +325,11 @@ def require_user(
             detail="this session ended when the password was changed",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Set only once the token has been accepted. A rejected request logs no
+    # user id, which is correct: the id in a failed attempt is a claim, not a
+    # fact, and writing it down would make the log assert something the
+    # request just failed to prove.
+    request.state.user_id = user.id
     return user
 
 

@@ -7,12 +7,28 @@ remaining call sites (scripts, debug logs) safe.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import re
 from typing import Any
 
 from app.core.config import settings
+
+#: The id of the request being served on this task, or "-" outside one.
+#:
+#: A context variable rather than a parameter threaded through every call: the
+#: point is that log lines nobody wrote for observability -- the limiter's
+#: warning that Redis is unreachable, the AI layer's timing, a driver's
+#: complaint -- come out carrying the request they happened in. Threading an
+#: argument would only correlate the call sites that remembered to.
+#:
+#: It is a `ContextVar`, so a request handler and anything it awaits share a
+#: value while two concurrent requests do not. `asyncio.to_thread` copies the
+#: context, so the bot's and the API's worker threads inherit it too.
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "finmentor_request_id", default="-"
+)
 
 #: substrings that mark a key as a credential
 _SECRET_KEY_PARTS = (
@@ -77,11 +93,105 @@ def scrub_text(text: str) -> str:
     return _LINK_CODE.sub(SECRET_MASK, text)
 
 
+def install_record_factory() -> None:
+    """Stamp `request_id` onto every record at the moment it is created.
+
+    A record factory rather than a `logging.Filter`, and the difference
+    matters. A filter lives on a handler, so it only reaches records that
+    reach *that* handler: anything added later -- another handler, pytest's
+    capture, a sidecar that ships logs somewhere -- sees records without the
+    field. A filter on a logger is worse still, because logger-level filters
+    are not applied to records propagated up from child loggers, which is
+    almost all of them.
+
+    The factory runs before any of that, so the field is simply part of every
+    record. Idempotent via the marker, because `configure_logging` is called
+    by the API, the bot and a number of tests.
+    """
+    base = logging.getLogRecordFactory()
+    if getattr(base, "_finmentor_request_id", False):
+        return
+
+    def factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
+        record = base(*args, **kwargs)
+        if not hasattr(record, "request_id"):
+            record.request_id = request_id_var.get()
+        return record
+
+    factory._finmentor_request_id = True  # type: ignore[attr-defined]
+    logging.setLogRecordFactory(factory)
+
+
+#: Attributes `logging` puts on every record. Anything else a caller passed
+#: through `extra=` is ours and belongs in the JSON output.
+_STANDARD_RECORD_ATTRS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
+) | {"message", "asctime", "taskName"}
+
+
+class JsonFormatter(logging.Formatter):
+    """One JSON object per line, for a log that is queried rather than read.
+
+    The message stays human-readable alongside the fields rather than being
+    replaced by them: a formatted sentence is what makes a log line legible
+    when somebody is tailing it, and the fields are what make it searchable.
+    Both are cheap.
+
+    Every string value goes through `scrub_text`, including the message. A
+    structured log is not a safer log by itself -- it is a log that puts
+    whatever it was handed into a field instead of a sentence -- and the
+    redaction rules are the same rules either way.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": scrub_text(record.getMessage()),
+            "request_id": getattr(record, "request_id", request_id_var.get()),
+        }
+        for key, value in record.__dict__.items():
+            if key not in _STANDARD_RECORD_ATTRS and key != "request_id":
+                payload[key] = redact(value)
+        if record.exc_info:
+            payload["exception"] = scrub_text(self.formatException(record.exc_info))
+        return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+#: `text` is readable while you are looking at it; `json` is queryable after
+#: the fact. The default is text because that is what a developer running
+#: `uvicorn` wants, and the compose file sets json because that is what a
+#: deployment wants. Neither is a better default in the abstract.
+LOG_FORMATS = ("text", "json")
+TEXT_FORMAT = "%(asctime)s %(levelname)s %(name)s [%(request_id)s] :: %(message)s"
+
+
 def configure_logging() -> None:
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
+    """Install the handler, the formatter and the request-id filter.
+
+    Idempotent: `configure_logging` is called by the API factory, by the bot
+    and by several tests, and `basicConfig` is a no-op once a handler exists
+    -- which used to mean the second caller silently got the first one's
+    format. This replaces the handler's formatter instead of trusting that.
+    """
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    wanted = settings.log_format.lower()
+    if wanted not in LOG_FORMATS:
+        wanted = "text"
+
+    formatter: logging.Formatter = (
+        JsonFormatter() if wanted == "json" else logging.Formatter(TEXT_FORMAT)
     )
+
+    install_record_factory()
+
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(level=level)
+    root.setLevel(level)
+    for handler in root.handlers:
+        handler.setFormatter(formatter)
 
 
 def _is_secret(key: str) -> bool:

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     env: str = "dev"
     log_level: str = "INFO"
+    #: `text` or `json`. See `app.core.logging.LOG_FORMATS`.
+    log_format: str = "text"
 
     # background jobs (off under pytest; see tests/conftest.py)
     enable_scheduler: bool = True

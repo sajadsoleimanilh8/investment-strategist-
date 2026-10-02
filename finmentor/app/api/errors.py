@@ -27,7 +27,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.logging import redact, scrub_text
+from app.core.logging import redact, request_id_var, scrub_text
 
 log = logging.getLogger("finmentor.api")
 
@@ -50,11 +50,20 @@ CODES = {
 
 
 def request_id(request: Request) -> str:
-    """Short, per-request, and stable across the log line and the response."""
+    """Short, per-request, and stable across the log line and the response.
+
+    The access-log middleware sets this before the request is dispatched, so
+    in a served request this reads what is already there. The fallback is for
+    a failure raised before that middleware ran, and for the tests that call
+    the handlers directly: minting a second id would mean the body quoted one
+    number and the log line another, which is worse than either.
+    """
     existing = getattr(request.state, "request_id", None)
     if existing:
         return existing
-    generated = uuid.uuid4().hex[:8]
+    generated = request_id_var.get()
+    if generated == "-":
+        generated = uuid.uuid4().hex[:8]
     request.state.request_id = generated
     return generated
 
