@@ -141,11 +141,22 @@ def topic_menu(topic_key: str) -> InlineKeyboardMarkup:
     ])
 
 
-def quiz_options(topic_key: str, topic: dict) -> InlineKeyboardMarkup:
-    """Options are answered by index — the text would blow the 64-byte budget."""
+def quiz_options(topic_key: str, topic: dict, question_idx: int) -> InlineKeyboardMarkup:
+    """Options are answered by index — the text would blow the 64-byte budget.
+
+    The arg is compound, `"<question>:<option>"`, because `parse_cb` splits
+    into three and leaves the remainder in `arg`. Carrying the question index
+    in the payload rather than only in `user_data` is what makes an old
+    button harmless: a tap that arrives out of order says which question it
+    was answering, so it lands in the right slot instead of the current one.
+
+    `quiz:opportunity_cost:2:1` is 26 bytes, well inside Telegram's 64.
+    """
+    question = topic["questions"][question_idx]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(option, callback_data=cb("quiz", topic_key, str(index)))]
-        for index, option in enumerate(topic["quiz"]["options"])
+        [InlineKeyboardButton(
+            option, callback_data=cb("quiz", topic_key, f"{question_idx}:{index}"))]
+        for index, option in enumerate(question["options"])
     ] + [[InlineKeyboardButton("◀️ Topics", callback_data=cb("learn", "page", "0"))]])
 
 

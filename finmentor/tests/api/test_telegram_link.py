@@ -20,6 +20,20 @@ from tests.conftest import error_message
 
 
 @pytest.fixture
+def frozen_window(monkeypatch):
+    """Stop the limiter's window rolling underneath a counting test.
+
+    `limits._LocalCounter.hit` buckets by `int(time.time() // 60)`, a fixed
+    wall-clock minute rather than a rolling one. Three requests that straddle
+    a `:00` land in two buckets and the third is allowed, so any test that
+    counts up to a limit fails whenever it happens to run across a minute
+    boundary. Rare per run, certain over enough runs, and exactly the kind of
+    intermittent failure lesson 2 in PROJECT_STATE is about.
+    """
+    monkeypatch.setattr(limits.time, "time", lambda: 1_800_000_000.0)
+
+
+@pytest.fixture
 def bot_user(db):
     user = users_repo.create(db, telegram_id=55_501)
     db.flush()
@@ -96,7 +110,7 @@ def test_issuing_needs_a_token(raw_client):
     assert raw_client.delete("/api/me/telegram").status_code == 401
 
 
-def test_issuing_is_rate_limited(client, monkeypatch):
+def test_issuing_is_rate_limited(client, monkeypatch, frozen_window):
     monkeypatch.setattr(settings, "telegram_link_attempts_per_minute", 2)
 
     codes = [client.post("/api/me/telegram/code").status_code for _ in range(3)]
@@ -294,7 +308,8 @@ def test_a_refused_link_still_spends_the_code(db, current_user):
     assert links_repo.usable(db, security.hash_link_code(code)) is None
 
 
-def test_redeeming_is_rate_limited_per_telegram_account(db, current_user, monkeypatch):
+def test_redeeming_is_rate_limited_per_telegram_account(db, current_user,
+                                                       monkeypatch, frozen_window):
     monkeypatch.setattr(settings, "telegram_link_attempts_per_minute", 3)
 
     for _ in range(3):
@@ -305,7 +320,8 @@ def test_redeeming_is_rate_limited_per_telegram_account(db, current_user, monkey
         link_pipeline.redeem(db, code="ZZZZ-ZZZZ-ZZZZ", telegram_id=55_999)
 
 
-def test_the_limit_is_per_account_not_global(db, current_user, monkeypatch):
+def test_the_limit_is_per_account_not_global(db, current_user, monkeypatch,
+                                            frozen_window):
     """One person guessing must not lock everybody else out."""
     monkeypatch.setattr(settings, "telegram_link_attempts_per_minute", 2)
     for _ in range(2):

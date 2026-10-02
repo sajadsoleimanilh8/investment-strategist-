@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api import quiz as quiz_pipeline
 from app.api.deps import CurrentUser, DbSession, require_user
 from app.repositories import education as education_repo
 from app.schemas.education import (
-    QuizIn, QuizQuestion, QuizResultOut, TopicListOut, TopicOut, TopicSummary,
+    QuizAnswerOut, QuizIn, QuizQuestion, QuizResultOut, TopicListOut, TopicOut,
+    TopicSummary,
 )
 from app.services.education_engine import get_topic, list_topics
 
@@ -53,8 +55,9 @@ def read_topic(key: str, user: CurrentUser, db: DbSession) -> TopicOut:
     return TopicOut(
         key=key, title=topic["title"], explanation=topic["explanation"],
         example=topic["example"], common_mistake=topic["common_mistake"],
-        quiz=QuizQuestion(question=topic["quiz"]["question"],
-                          options=topic["quiz"]["options"]),
+        questions=[QuizQuestion(question=question["question"],
+                                options=question["options"])
+                   for question in topic["questions"]],
         completed=bool(row and row.completed),
         quiz_score=row.quiz_score if row else None,
     )
@@ -62,24 +65,34 @@ def read_topic(key: str, user: CurrentUser, db: DbSession) -> TopicOut:
 
 @router.post("/learn/{key}/quiz", response_model=QuizResultOut)
 def submit_quiz(key: str, payload: QuizIn, user: CurrentUser, db: DbSession) -> QuizResultOut:
-    """Mark the answer and record progress. Wrong answers still count as read.
+    """Mark the answers and record progress. A wrong answer still counts as read.
 
-    A one-question quiz is a comprehension check, not an exam: getting it wrong
-    and being shown the answer is the lesson. `completed` is what Financial DNA
-    counts, and it is set either way — `quiz_score` is what distinguishes them.
+    The marking, the validation and the write live in `app/api/quiz.py`,
+    which the Telegram bot calls as well. They used to live here, and the bot
+    scored its quiz on screen and recorded nothing -- so a bot-only user's
+    `financial_knowledge` band never moved while the bot displayed it.
+
+    What a score means did change with three questions: it is the percentage
+    right, so 0, 33, 67 or 100. Scores recorded by the one-question version
+    read as 0 or 100 and still mean what they meant. `completed` is what
+    Financial DNA counts, and it is still set either way, so nobody's
+    existing band moves.
     """
-    topic = _load_topic(key)
-    quiz = topic["quiz"]
-    if payload.answer_idx >= len(quiz["options"]):
-        raise HTTPException(422,   # literal: the constant differs by Starlette version, see errors.py
-                            "that option does not exist")
-
-    correct = payload.answer_idx == quiz["answer_idx"]
-    score = 100 if correct else 0
-    education_repo.record_quiz(db, user.id, key, score=score, completed=True)
-    db.commit()
+    try:
+        result = quiz_pipeline.submit(db, user_id=user.id, key=key,
+                                      answers=payload.answers)
+    except quiz_pipeline.QuizRefused as refused:
+        raise HTTPException(refused.status_code, refused.message)
 
     return QuizResultOut(
-        correct=correct, correct_idx=quiz["answer_idx"],
-        explanation=topic["common_mistake"], score=score, completed=True,
+        answers=[
+            QuizAnswerOut(correct=mark, correct_idx=question["answer_idx"],
+                          why=question["why"])
+            for mark, question in zip(result.marks, result.topic["questions"])
+        ],
+        correct_count=result.correct_count,
+        total=result.total,
+        score=result.score,
+        completed=result.completed,
+        common_mistake=result.topic["common_mistake"],
     )

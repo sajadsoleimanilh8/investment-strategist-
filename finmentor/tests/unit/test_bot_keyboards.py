@@ -29,7 +29,8 @@ def every_keyboard():
         keyboards.learn_menu(0),
         keyboards.learn_menu(1),
         keyboards.topic_menu(topic_key),
-        keyboards.quiz_options(topic_key, get_topic(topic_key)),
+        keyboards.quiz_options(topic_key, get_topic(topic_key), 0),
+        keyboards.quiz_options(topic_key, get_topic(topic_key), 2),
         keyboards.confirm_cancel("goal", "delete", "7"),
         keyboards.skip_keyboard(),
         keyboards.income_type_picker(),
@@ -139,10 +140,22 @@ def test_the_market_menu_offers_remove_for_watched_and_add_for_the_rest():
 
 @pytest.mark.parametrize("topic", list_topics(), ids=lambda t: t["key"])
 def test_quiz_options_offer_one_button_per_answer(topic):
-    buttons = [b for b in all_buttons(keyboards.quiz_options(topic["key"], topic))
-               if parse_cb(b.callback_data)[0] == "quiz"]
+    for question_idx, question in enumerate(topic["questions"]):
+        buttons = [
+            b for b in all_buttons(
+                keyboards.quiz_options(topic["key"], topic, question_idx))
+            if parse_cb(b.callback_data)[0] == "quiz"
+        ]
 
-    assert len(buttons) == len(topic["quiz"]["options"])
-    assert [parse_cb(b.callback_data)[2] for b in buttons] == [
-        str(i) for i in range(len(topic["quiz"]["options"]))
-    ]
+        assert len(buttons) == len(question["options"])
+        assert [parse_cb(b.callback_data)[2] for b in buttons] == [
+            f"{question_idx}:{i}" for i in range(len(question["options"]))
+        ]
+
+
+@pytest.mark.parametrize("topic", list_topics(), ids=lambda t: t["key"])
+def test_quiz_callback_data_fits_telegrams_limit(topic):
+    """The payload grew a field. `cb` raises past 64 bytes, so this would
+    fail at the longest topic key rather than in somebody's chat."""
+    for question_idx in range(len(topic["questions"])):
+        keyboards.quiz_options(topic["key"], topic, question_idx)

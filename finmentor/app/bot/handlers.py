@@ -21,6 +21,7 @@ from telegram.ext import ContextTypes
 from app.ai import intent as intent_parser
 from app.ai.intent import parse_amount
 from app.api import ask as ask_pipeline
+from app.api import quiz as quiz_pipeline
 from app.api import telegram_link as link_pipeline
 from app.api.deps import load_twin
 from app.bot import keyboards, messages, views
@@ -46,6 +47,8 @@ log = logging.getLogger("finmentor.bot")
 
 #: What the next free-text message means, when it means anything.
 PENDING_KEY = "pending_input"
+#: Where a half-finished quiz attempt lives between taps.
+QUIZ_KEY = "quiz_attempt"
 PARSE_MODE = "Markdown"
 
 
@@ -504,18 +507,97 @@ async def _learn_callback(
     if action == "topic":
         await _edit(update, views.topic_view(topic), keyboards.topic_menu(arg))
     elif action == "quiz":
-        await _edit(update, views.quiz_view(topic), keyboards.quiz_options(arg, topic))
+        # Starting over, so any half-finished attempt is discarded rather than
+        # resumed: "Quiz me" means from the top.
+        if ctx.user_data is not None:
+            ctx.user_data[QUIZ_KEY] = {"topic": arg, "answers": {}}
+        await _edit(update, views.quiz_view(topic, 0),
+                    keyboards.quiz_options(arg, topic, 0))
+
+
+def _submit_quiz(user_id: int, topic_key: str, answers: list[int]):
+    """Score and record, in a worker thread with its own session."""
+    with session() as db:
+        return quiz_pipeline.submit(db, user_id=user_id, key=topic_key,
+                                    answers=answers)
 
 
 async def _quiz_callback(
-    update: Update, ctx: ContextTypes.DEFAULT_TYPE, topic_key: str, choice: str | None
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, topic_key: str, arg: str | None
 ) -> None:
+    """One tapped option. Advances, or scores the attempt when it is complete.
+
+    `arg` is `"<question>:<option>"`. The question index travels in the
+    payload rather than only in `user_data`, so a tap on an older message
+    lands in the slot it was answering instead of whichever one the user
+    happens to be on. Re-answering overwrites, which is why the answers are
+    held in a dict keyed by question index rather than appended to a list.
+    """
     topic = get_topic(topic_key)
     if topic is None:
         await _edit(update, views.topics_list_view(list_topics()), keyboards.learn_menu(0))
         return
-    chosen = int(choice) if choice and choice.isdigit() else -1
-    await _edit(update, views.quiz_result_view(topic, chosen), keyboards.topic_menu(topic_key))
+
+    questions = topic["questions"]
+    question_idx, chosen = _parse_quiz_arg(arg, len(questions))
+    if question_idx is None or not 0 <= chosen < len(questions[question_idx]["options"]):
+        # A stale button from before a content change. Start the topic again
+        # rather than guessing what it meant.
+        await _edit(update, views.quiz_view(topic, 0),
+                    keyboards.quiz_options(topic_key, topic, 0))
+        return
+
+    state = ctx.user_data.get(QUIZ_KEY) if ctx.user_data is not None else None
+    if not isinstance(state, dict) or state.get("topic") != topic_key:
+        state = {"topic": topic_key, "answers": {}}
+        if ctx.user_data is not None:
+            ctx.user_data[QUIZ_KEY] = state
+    answers: dict = state["answers"]
+    answers[question_idx] = chosen
+
+    remaining = [i for i in range(len(questions)) if i not in answers]
+    if remaining:
+        next_idx = remaining[0]
+        was_correct = chosen == questions[question_idx]["answer_idx"]
+        # `quiz_progress_view` renders the mark plus the next question, so the
+        # question index it is given is the one just answered.
+        await _edit(
+            update,
+            views.quiz_progress_view(topic, question_idx, was_correct)
+            if next_idx == question_idx + 1
+            else views.quiz_view(topic, next_idx),
+            keyboards.quiz_options(topic_key, topic, next_idx),
+        )
+        return
+
+    ordered = [answers[i] for i in range(len(questions))]
+    user_id = await asyncio.to_thread(
+        _lookup_user, update.effective_user.id, ctx.user_data or {})
+    if user_id is None:
+        await _edit(update, messages.SOMETHING_WENT_WRONG, keyboards.main_menu())
+        return
+
+    try:
+        result = await asyncio.to_thread(_submit_quiz, user_id, topic_key, ordered)
+    except quiz_pipeline.QuizRefused as refused:
+        await _edit(update, refused.message, keyboards.topic_menu(topic_key))
+        return
+
+    if ctx.user_data is not None:
+        ctx.user_data.pop(QUIZ_KEY, None)
+    await _edit(update, views.quiz_result_view(topic, result.marks),
+                keyboards.topic_menu(topic_key))
+
+
+def _parse_quiz_arg(arg: str | None, question_count: int) -> tuple[int | None, int]:
+    """`"2:1"` -> `(2, 1)`. `(None, -1)` for anything that is not that."""
+    parts = (arg or "").split(":")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None, -1
+    question_idx, chosen = int(parts[0]), int(parts[1])
+    if not 0 <= question_idx < question_count:
+        return None, -1
+    return question_idx, chosen
 
 
 # --- errors -------------------------------------------------------------

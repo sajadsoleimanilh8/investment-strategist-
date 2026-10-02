@@ -1,9 +1,17 @@
 /**
  * The 12 curated lessons and their comprehension checks.
  *
- * The content is written by people, not generated — so this page renders it
- * verbatim and adds nothing. The quiz answer only arrives after the user has
- * committed to one, which is why the topic payload does not contain it.
+ * The content is written by people, not generated, so this page renders it
+ * verbatim and adds nothing. The answers only arrive once the user has
+ * committed to theirs, which is why the topic payload contains neither the
+ * right option nor the per-question explanation.
+ *
+ * All three questions are answered before anything is marked. The
+ * alternative, marking each as it is tapped, turns the second and third
+ * questions into a different exercise: once you know you got the first one
+ * wrong you are being tested on your reaction to that, not on the lesson.
+ * It also means one submission, so the score written down is the score the
+ * user actually earned in one pass.
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,6 +24,8 @@ export function Learn() {
   const queryClient = useQueryClient();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [result, setResult] = useState<QuizResult | null>(null);
+  /** Chosen option per question index. Sparse until the quiz is finished. */
+  const [picked, setPicked] = useState<Record<number, number>>({});
 
   const topics = useQuery({ queryKey: ["topics"], queryFn: listTopics });
 
@@ -26,7 +36,7 @@ export function Learn() {
   });
 
   const answer = useMutation({
-    mutationFn: (answerIdx: number) => submitQuiz(openKey!, answerIdx),
+    mutationFn: (answers: number[]) => submitQuiz(openKey!, answers),
     onSuccess: (data) => {
       setResult(data);
       // Completing a topic raises the knowledge band in Financial DNA, so the
@@ -39,7 +49,12 @@ export function Learn() {
   function open(key: string) {
     setOpenKey(key === openKey ? null : key);
     setResult(null);
+    setPicked({});
   }
+
+  const questions = topic.data?.questions ?? [];
+  const answered = questions.length > 0
+    && questions.every((_, index) => picked[index] !== undefined);
 
   return (
     <>
@@ -86,28 +101,79 @@ export function Learn() {
                 <h4>The mistake to avoid</h4>
                 <p>{topic.data.common_mistake}</p>
 
-                <h4>{topic.data.quiz.question}</h4>
+                <h4>Quick check</h4>
                 {result === null ? (
-                  <ul className="choices">
-                    {topic.data.quiz.options.map((option, index) => (
-                      <li key={option}>
-                        <button
-                          type="button"
-                          onClick={() => answer.mutate(index)}
-                          disabled={answer.isPending}
-                        >
-                          {option}
-                        </button>
-                      </li>
+                  <>
+                    {topic.data.questions.map((question, qIndex) => (
+                      <fieldset key={question.question} className="quiz">
+                        <legend>
+                          {qIndex + 1}. {question.question}
+                        </legend>
+                        <ul className="choices">
+                          {question.options.map((option, index) => (
+                            <li key={option}>
+                              <label>
+                                <input
+                                  type="radio"
+                                  name={`q-${openKey}-${qIndex}`}
+                                  value={index}
+                                  checked={picked[qIndex] === index}
+                                  onChange={() =>
+                                    setPicked((current) => ({ ...current, [qIndex]: index }))
+                                  }
+                                />
+                                {" "}{option}
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      </fieldset>
                     ))}
-                  </ul>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={!answered || answer.isPending}
+                        onClick={() =>
+                          answer.mutate(questions.map((_, index) => picked[index]))
+                        }
+                      >
+                        {answer.isPending ? "Checking…" : "Check my answers"}
+                      </button>
+                    </div>
+                    {!answered && (
+                      <p className="muted">
+                        Answer all {questions.length} to see how you did. Nothing is
+                        marked until then.
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <div role="status" className="result">
                     <p>
-                      <strong>{result.correct ? "Correct." : "Not quite."}</strong>{" "}
-                      The answer is: {topic.data.quiz.options[result.correct_idx]}
+                      <strong>
+                        {result.correct_count} of {result.total} right.
+                      </strong>
                     </p>
-                    <p>{result.explanation}</p>
+                    <ol className="quiz-marks">
+                      {result.answers.map((mark, index) => (
+                        <li key={topic.data!.questions[index].question}>
+                          <p>
+                            <strong>{mark.correct ? "Correct." : "Not quite."}</strong>{" "}
+                            {topic.data!.questions[index].options[mark.correct_idx]}
+                          </p>
+                          {/* Shown for the right answers too: nobody can tell
+                              from the outside whether a correct answer was
+                              knowledge or a guess. */}
+                          <p className="muted">{mark.why}</p>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="actions">
+                      <button type="button" onClick={() => { setResult(null); setPicked({}); }}>
+                        Try again
+                      </button>
+                    </div>
                   </div>
                 )}
               </article>

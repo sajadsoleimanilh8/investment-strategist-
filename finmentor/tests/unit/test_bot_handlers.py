@@ -277,13 +277,118 @@ async def test_adding_a_symbol_writes_it_to_the_watchlist(demo, replies, ctx, bo
 async def test_a_quiz_answer_is_marked(demo, replies, ctx):
     from app.services.education_engine import get_topic
 
-    correct = get_topic("budgeting")["quiz"]["answer_idx"]
+    questions = get_topic("budgeting")["questions"]
+    correct = questions[0]["answer_idx"]
 
-    await handlers.on_callback(tap(replies, f"quiz:budgeting:{correct}"), ctx)
+    await handlers.on_callback(tap(replies, f"quiz:budgeting:0:{correct}"), ctx)
     assert "Correct" in last(replies)
 
-    await handlers.on_callback(tap(replies, f"quiz:budgeting:{(correct + 1) % 3}"), ctx)
+    await handlers.on_callback(
+        tap(replies, f"quiz:budgeting:0:{(correct + 1) % 3}"), ctx)
     assert "Not quite" in last(replies)
+
+
+@pytest.mark.asyncio
+async def test_the_quiz_walks_all_three_questions_then_scores(demo, bot_db,
+                                                              replies, ctx):
+    from app.repositories import education as education_repo
+    from app.services.education_engine import get_topic
+
+    questions = get_topic("budgeting")["questions"]
+
+    for index, question in enumerate(questions):
+        await handlers.on_callback(
+            tap(replies, f"quiz:budgeting:{index}:{question['answer_idx']}"), ctx)
+
+    assert "3 of 3 right" in last(replies)
+    with bot_db() as db:
+        row = education_repo.get(db, demo, "budgeting")
+        assert row is not None and row.quiz_score == 100 and row.completed
+
+
+@pytest.mark.asyncio
+async def test_the_bot_quiz_records_progress(demo, bot_db, replies, ctx):
+    """It did not, and the bot displayed `count_completed` in Financial DNA.
+
+    Tapping through a quiz in Telegram scored it on screen and wrote nothing,
+    so a bot-only user's knowledge band could never move. The scoring and the
+    write live in `app/api/quiz.py` now, which both surfaces call.
+    """
+    from app.repositories import education as education_repo
+    from app.services.education_engine import get_topic
+
+    questions = get_topic("risk")["questions"]
+    for index, question in enumerate(questions):
+        await handlers.on_callback(
+            tap(replies, f"quiz:risk:{index}:{question['answer_idx']}"), ctx)
+
+    with bot_db() as db:
+        assert education_repo.count_completed(db, demo) >= 1
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_answer_still_records_the_topic_as_read(demo, bot_db,
+                                                              replies, ctx):
+    from app.repositories import education as education_repo
+    from app.services.education_engine import get_topic
+
+    questions = get_topic("debt")["questions"]
+    for index, question in enumerate(questions):
+        wrong = (question["answer_idx"] + 1) % len(question["options"])
+        await handlers.on_callback(tap(replies, f"quiz:debt:{index}:{wrong}"), ctx)
+
+    assert "0 of 3 right" in last(replies)
+    with bot_db() as db:
+        row = education_repo.get(db, demo, "debt")
+        assert row.completed is True and row.quiz_score == 0
+
+
+@pytest.mark.asyncio
+async def test_re_answering_a_question_overwrites_rather_than_advancing(
+    demo, bot_db, replies, ctx
+):
+    """A tap on an older message answers the question it was asking.
+
+    The question index travels in the callback payload for this reason: with
+    the position held only in `user_data`, a stale tap would land in whichever
+    slot the user happened to be on.
+    """
+    from app.services.education_engine import get_topic
+
+    questions = get_topic("inflation")["questions"]
+    first_wrong = (questions[0]["answer_idx"] + 1) % len(questions[0]["options"])
+
+    await handlers.on_callback(tap(replies, f"quiz:inflation:0:{first_wrong}"), ctx)
+    # Go back and correct question 1 before answering the rest.
+    await handlers.on_callback(
+        tap(replies, f"quiz:inflation:0:{questions[0]['answer_idx']}"), ctx)
+    for index in (1, 2):
+        await handlers.on_callback(
+            tap(replies, f"quiz:inflation:{index}:{questions[index]['answer_idx']}"),
+            ctx)
+
+    assert "3 of 3 right" in last(replies)
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_quiz_payload_restarts_the_topic(demo, replies, ctx):
+    """An old button from before the content changed, rather than a guess."""
+    await handlers.on_callback(tap(replies, "quiz:budgeting:nonsense"), ctx)
+
+    assert "question 1 of 3" in last(replies)
+
+
+@pytest.mark.asyncio
+async def test_quiz_me_starts_from_the_first_question(demo, replies, ctx):
+    from app.services.education_engine import get_topic
+
+    questions = get_topic("budgeting")["questions"]
+    await handlers.on_callback(
+        tap(replies, f"quiz:budgeting:0:{questions[0]['answer_idx']}"), ctx)
+
+    await handlers.on_callback(tap(replies, "learn:quiz:budgeting"), ctx)
+
+    assert "question 1 of 3" in last(replies)
 
 
 # --- errors -------------------------------------------------------------

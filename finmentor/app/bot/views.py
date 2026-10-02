@@ -256,15 +256,49 @@ def topic_view(topic: dict) -> str:
     )
 
 
-def quiz_view(topic: dict) -> str:
-    """Just the question — the options are buttons (see keyboards.quiz_options)."""
-    return f"❓ *{topic['title']} — quick check*\n\n{topic['quiz']['question']}"
+def quiz_view(topic: dict, question_idx: int) -> str:
+    """One question. The options are buttons (see keyboards.quiz_options).
+
+    The counter is there because the quiz is three questions now, and a user
+    who cannot see how many are left does not know whether to begin.
+    """
+    questions = topic["questions"]
+    return _join(
+        f"❓ *{topic['title']}: question {question_idx + 1} of {len(questions)}*",
+        questions[question_idx]["question"],
+    )
 
 
-def quiz_result_view(topic: dict, chosen_idx: int) -> str:
-    quiz = topic["quiz"]
-    head = "✅ Correct." if chosen_idx == quiz["answer_idx"] else "❌ Not quite."
-    return _join(head, f"The answer is: {quiz['options'][quiz['answer_idx']]}")
+def quiz_progress_view(topic: dict, question_idx: int, was_correct: bool) -> str:
+    """The mark for the answer just given, then the next question."""
+    answered = topic["questions"][question_idx]
+    head = "✅ Correct." if was_correct else "❌ Not quite."
+    return _join(
+        head,
+        f"The answer is: {answered['options'][answered['answer_idx']]}",
+        answered["why"],
+        quiz_view(topic, question_idx + 1),
+    )
+
+
+def quiz_result_view(topic: dict, marks: list[bool]) -> str:
+    """The whole attempt, a line per question.
+
+    Every `why` is shown, not only the missed ones: the explanation for a
+    question you guessed right is still worth reading, and nobody can tell
+    from the outside which of the two it was.
+    """
+    questions = topic["questions"]
+    lines = [
+        f"{'✅' if mark else '❌'} {question['options'][question['answer_idx']]}\n"
+        f"_{question['why']}_"
+        for mark, question in zip(marks, questions)
+    ]
+    return _join(
+        f"🧠 *{topic['title']}: {sum(marks)} of {len(marks)} right*",
+        *lines,
+        f"*Common mistake*\n{topic['common_mistake']}",
+    )
 
 
 def topics_list_view(topics: list[dict]) -> str:

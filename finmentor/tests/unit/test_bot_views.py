@@ -211,20 +211,56 @@ def test_every_topic_renders(topic):
     assert "Common mistake" in text
 
 
-def test_quiz_view_asks_the_question_without_giving_the_answer():
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_quiz_view_asks_the_question_without_giving_the_answer(index):
     topic = get_topic("diversification")
-    text = views.quiz_view(topic)
+    question = topic["questions"][index]
+    text = views.quiz_view(topic, index)
 
-    assert topic["quiz"]["question"] in text
-    assert topic["quiz"]["options"][topic["quiz"]["answer_idx"]] not in text
+    assert question["question"] in text
+    assert question["options"][question["answer_idx"]] not in text
+    assert question["why"] not in text, "the explanation names the answer"
 
 
-def test_quiz_result_marks_right_and_wrong():
+def test_quiz_view_says_where_you_are():
+    """Three questions without a counter is a quiz you cannot see the end of."""
+    text = views.quiz_view(get_topic("diversification"), 1)
+
+    assert "question 2 of 3" in text
+
+
+def test_quiz_progress_marks_the_answer_then_asks_the_next_one():
     topic = get_topic("diversification")
-    correct_idx = topic["quiz"]["answer_idx"]
+    first = topic["questions"][0]
 
-    assert "Correct" in views.quiz_result_view(topic, correct_idx)
-    assert "Not quite" in views.quiz_result_view(topic, (correct_idx + 1) % 3)
+    right = views.quiz_progress_view(topic, 0, True)
+    wrong = views.quiz_progress_view(topic, 0, False)
+
+    assert "Correct" in right and "Not quite" in wrong
+    for text in (right, wrong):
+        assert first["options"][first["answer_idx"]] in text
+        assert first["why"] in text, "why it was right, not just what was right"
+        assert topic["questions"][1]["question"] in text
+
+
+def test_quiz_result_shows_the_score_and_every_explanation():
+    """Including for the ones they got right: nobody can tell from the outside
+    whether a correct answer was knowledge or a guess."""
+    topic = get_topic("diversification")
+
+    text = views.quiz_result_view(topic, [True, False, True])
+
+    assert "2 of 3 right" in text
+    for question in topic["questions"]:
+        assert question["why"] in text
+    assert topic["common_mistake"] in text
+
+
+def test_quiz_result_counts_a_clean_sweep_and_a_blank():
+    topic = get_topic("diversification")
+
+    assert "3 of 3 right" in views.quiz_result_view(topic, [True] * 3)
+    assert "0 of 3 right" in views.quiz_result_view(topic, [False] * 3)
 
 
 def test_help_view_lists_every_command():

@@ -12,7 +12,7 @@ English-only (see SPEC §31).
 ## Status
 
 **Complete — phases 0 through 8.** Two delivery surfaces over one deterministic
-core, 1716 tests, and a stack that comes up with one command.
+core, 1823 tests, and a stack that comes up with one command.
 
 ![The dashboard](docs/screenshots/dashboard.png)
 
@@ -79,7 +79,7 @@ failure.
 ### Tests
 
 ```bash
-pytest                                   # 1521 tests, SQLite, no infrastructure
+pytest                                   # 1613 tests, SQLite, no infrastructure
 FINMENTOR_TEST_DATABASE_URL=postgresql+psycopg://finmentor:finmentor@localhost:5432/finmentor_test pytest
 pytest --cov --cov-fail-under=100        # the app/services floor
 

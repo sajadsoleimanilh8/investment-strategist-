@@ -912,3 +912,21 @@ ul.chips button { font-size: 0.875rem; }
   border-radius: var(--radius-sm);
   z-index: 0;
 }
+
+/* --- quiz ---------------------------------------------------------------
+ *
+ * A fieldset per question, because the options are one choice and a legend is
+ * how a screen reader announces what the choice is about. The border is off:
+ * three bordered boxes in a column reads as three forms rather than one.
+ */
+.quiz { border: 0; padding: 0; margin-block: var(--space-4); }
+.quiz legend { padding: 0; margin-block-end: var(--space-2); font-weight: 500; }
+.quiz .choices { list-style: none; padding: 0; margin: 0; }
+.quiz .choices li { margin-block: var(--space-1); }
+.quiz label { display: flex; gap: var(--space-2); align-items: baseline; cursor: pointer; }
+/* 44px of target for a 16px control, without moving the control itself. */
+.quiz label input { min-width: 1rem; min-height: 1rem; margin-block-start: 0.2rem; }
+
+.quiz-marks { padding-inline-start: var(--space-4); }
+.quiz-marks li { margin-block: var(--space-3); }
+.quiz-marks p { margin-block: var(--space-1); }

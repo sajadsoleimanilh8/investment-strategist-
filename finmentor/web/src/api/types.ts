@@ -182,17 +182,33 @@ export interface Topic {
   explanation: string;
   example: string;
   common_mistake: string;
-  quiz: { question: string; options: string[] };
+  questions: QuizQuestion[];
   completed: boolean;
   quiz_score: number | null;
 }
 
-export interface QuizResult {
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+}
+
+export interface QuizAnswer {
   correct: boolean;
   correct_idx: number;
-  explanation: string;
+  /** Why that option is right. Specific to the question, not the topic. */
+  why: string;
+}
+
+export interface QuizResult {
+  /** One per question, in the order they were asked. */
+  answers: QuizAnswer[];
+  correct_count: number;
+  total: number;
+  /** Percentage. Three questions give 0, 33, 67 or 100. */
   score: number;
+  /** True whatever the score: a quiz here is a check, not an exam. */
   completed: boolean;
+  common_mistake: string;
 }
 
 export interface AskResponse {

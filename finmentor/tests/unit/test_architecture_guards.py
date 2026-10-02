@@ -331,6 +331,7 @@ NO_COMMIT_NEEDED = {
     "ask": "app/api/ask.py commits inside the pipeline",
     "refresh": "reads a refresh token and mints a pair; writes nothing",
     "exchange": "burns a jti in Redis; touches no table",
+    "submit_quiz": "app/api/quiz.py commits inside the pipeline",
 }
 
 

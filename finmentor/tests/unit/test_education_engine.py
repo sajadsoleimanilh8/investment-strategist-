@@ -2,7 +2,8 @@
 import pytest
 
 from app.services.education_engine import (
-    QUIZ_FIELDS, REQUIRED_FIELDS, TOPICS, get_topic, list_topics,
+    QUESTIONS_PER_TOPIC, QUIZ_FIELDS, REQUIRED_FIELDS, TOPICS, get_topic,
+    list_topics, score_quiz,
 )
 
 SPEC_TOPIC_KEYS = {
@@ -49,15 +50,61 @@ def test_no_legacy_localised_fields_remain(key):
 
 
 @pytest.mark.parametrize("key", sorted(SPEC_TOPIC_KEYS))
-def test_every_quiz_is_answerable(key):
-    quiz = TOPICS[key]["quiz"]
-    assert all(field in quiz for field in QUIZ_FIELDS)
-    assert quiz["question"].endswith("?")
-    assert len(quiz["options"]) >= 3
-    assert len(set(quiz["options"])) == len(quiz["options"]), "duplicate options"
-    assert 0 <= quiz["answer_idx"] < len(quiz["options"])
-    assert all(is_english_text(option) for option in quiz["options"])
-    assert is_english_text(quiz["question"])
+def test_every_quiz_has_the_same_number_of_questions(key):
+    """A fixed count is what makes a percentage mean the same thing on every
+    topic, and what stops a topic quietly going back to one question."""
+    assert len(TOPICS[key]["questions"]) == QUESTIONS_PER_TOPIC
+
+
+@pytest.mark.parametrize("key", sorted(SPEC_TOPIC_KEYS))
+def test_every_question_is_answerable(key):
+    for index, question in enumerate(TOPICS[key]["questions"]):
+        where = f"{key}[{index}]"
+        assert all(field in question for field in QUIZ_FIELDS), where
+        assert question["question"].endswith("?"), where
+        assert len(question["options"]) >= 3, where
+        assert len(set(question["options"])) == len(question["options"]),             f"duplicate options in {where}"
+        assert 0 <= question["answer_idx"] < len(question["options"]), where
+        assert all(is_english_text(option) for option in question["options"]), where
+        assert is_english_text(question["question"]), where
+
+
+@pytest.mark.parametrize("key", sorted(SPEC_TOPIC_KEYS))
+def test_every_question_explains_itself(key):
+    """`why` is per question, not per topic.
+
+    The result used to return the topic's `common_mistake` whatever the user
+    got wrong, which is a sentence about the topic rather than about the
+    question they just missed.
+    """
+    for index, question in enumerate(TOPICS[key]["questions"]):
+        why = question["why"]
+        assert why and why.strip() == why, f"{key}[{index}]"
+        assert len(why) > 40, f"{key}[{index}]: too short to explain anything"
+        assert is_english_text(why), f"{key}[{index}]"
+
+
+@pytest.mark.parametrize("key", sorted(SPEC_TOPIC_KEYS))
+def test_no_question_is_repeated_within_a_topic(key):
+    prompts = [q["question"] for q in TOPICS[key]["questions"]]
+    assert len(set(prompts)) == len(prompts)
+
+
+def test_no_question_is_repeated_across_topics():
+    prompts = [q["question"] for topic in TOPICS.values()
+               for q in topic["questions"]]
+    assert len(set(prompts)) == len(prompts)
+
+
+@pytest.mark.parametrize("key", sorted(SPEC_TOPIC_KEYS))
+def test_the_answer_is_not_always_in_the_same_position(key):
+    """Three questions all answered "b" is a quiz you can pass without reading.
+
+    Asserted per topic rather than globally, because a user sees one topic at
+    a time and that is where the pattern would be learnable.
+    """
+    positions = [q["answer_idx"] for q in TOPICS[key]["questions"]]
+    assert len(set(positions)) > 1, f"{key}: every answer is option {positions[0]}"
 
 
 def test_list_topics_carries_the_key_and_full_content():

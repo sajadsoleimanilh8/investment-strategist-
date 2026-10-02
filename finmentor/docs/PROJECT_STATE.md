@@ -17,7 +17,7 @@ exist and remain authoritative for their own purposes:
 Git holds the history. This file holds only what a fresh reader needs in order
 to act correctly today.
 
-Last updated against commit `9765c89` plus Telegram account linking
+Last updated against commit `c7058db` plus real quizzes
 (uncommitted at time of writing).
 
 ---
@@ -134,39 +134,85 @@ README's test counts, and `100vh` on the app shell.
 
 ### Phase 5 — IN PROGRESS
 
-Seven items. One done, two blocked on the owner, four open.
+Seven items. Five done, two blocked on the owner.
 
-**Telegram-to-web account linking — DONE.** `users` had carried
-`telegram_id` and `email` on one row since the initial schema, with a comment
-saying the two would hold both "once the two identities are linked". Nothing
-linked them.
+**Telegram-to-web account linking — DONE.** A code is issued to an
+authenticated browser (`POST /api/me/telegram/code`) and redeemed inside
+Telegram, by `/link CODE` or a deep link. Twelve characters from an alphabet
+with no `O`/`0`, `I`/`1`/`L` or `U`/`V`, SHA-256 hashed, single use, retired
+when another is issued, ten minutes. About 59 bits: too much to guess against
+the limiter, not enough to shrug at if the table leaks, which is why the TTL
+is minutes rather than the hour a reset link gets.
 
-A code is issued to an authenticated browser (`POST /api/me/telegram/code`)
-and redeemed inside Telegram, by `/link CODE` or by a deep link that saves the
-typing. It is twelve characters from an alphabet with no `O`/`0`, `I`/`1`/`L`
-or `U`/`V`, stored as a SHA-256 hash, single use, retired when another is
-issued, and good for ten minutes. That is about 59 bits — far too much to
-guess against the limiter and not enough to shrug at if the table leaks,
-which is why the TTL is minutes rather than the hour a reset link gets.
-
-Linking is a **merge**, because the normal case is someone who used the bot
-first and signed up later, so the data they care about is on the bot side. The
-rule is one sentence: *the web account wins every collision; everything that
-does not collide moves across.* A collision is not a matter of taste, it is
-exactly the per-user unique constraints, and `account_link.MERGED` lists them
-per table. `tests/unit/test_account_link.py` asserts each one against the
-schema and walks the mapper registry so a table added later cannot be
-forgotten — forgetting would lose its rows silently, with no error.
-
-A Telegram account already attached to another *web* account is refused
+Linking is a **merge**, because the normal case is somebody who used the bot
+first and signed up later, so the data they care about is on the bot side.
+The rule: *the web account wins every collision; everything that does not
+collide moves across.* A collision is exactly the per-user unique
+constraints, listed per table in `account_link.MERGED`, asserted against the
+schema, with a mapper-registry walk so a table added later cannot be
+forgotten. A Telegram account already on another *web* account is refused
 rather than merged: that would have to pick which email survives.
 
-Account deletion and export still have a prerequisite: **the applicable
-jurisdiction and retention requirements are UNKNOWN** and must be established
-by the owner before implementation. Do not infer them.
+**Expense history — DONE.** `replace_expenses` had been filing every save
+under a `YYYY-MM` period since the product shipped and rewriting only that
+period, so the data was accumulating where nothing could read it.
+`GET /api/me/expenses/history` is the read, over a bounded window, in one
+statement. A month with no records is **absent, not zero**: zeros would say
+the user spent nothing and what we have is no record. No planned-versus-actual
+column, because the plan is one current value and not a value per month.
 
-Still open: expense history, income history, real quizzes (the current ones
-are one question per topic by design), structured observability.
+**Income history — DONE.** `income_records` had been in the schema since the
+initial migration, described as "the signal behind `income_type = variable`",
+with nothing ever writing to it. Profile saves now file the period's income
+the same way expenses are filed, and `GET /api/me/income/history` reads it
+back with a steadiness measure (coefficient of variation, three periods
+minimum).
+
+It does **not** derive `income_type`. Nothing reads that field today, so a
+derivation would be a write with no effect; and the moment something does
+read it, a silent derivation would move every existing user's figures without
+them asking. The panel states what the records look like and points at the
+field. See decision 11.
+
+**Structured observability — DONE.** An access log already existed with a
+duration and redacted query params, so the gap was narrower than it looked:
+it was a sentence rather than fields, it logged the concrete path so
+`/api/goals/7` and `/api/goals/8` were separate keys, and `request_id` only
+existed inside the error handlers. Now: a JSON formatter behind `LOG_FORMAT`
+(compose sets `json`), the matched route's template instead of the path,
+`X-Request-ID` on every response, and a `contextvars` request id stamped onto
+every record by a `LogRecordFactory` — so a line emitted by the limiter or
+the AI layer carries the request it happened in. `require_user` records the
+caller, which makes the access log personal data; the retention decision has
+to cover it.
+
+**Real quizzes — DONE.** One question per topic became three, with a `why`
+per question: the result used to return the topic's `common_mistake` whatever
+the user got wrong, which is a sentence about the topic rather than about the
+question they missed. Score is the percentage, so 0, 33, 67 or 100, which
+fits the 0..100 the progress table already enforced — no migration. A
+submission with the wrong number of answers is refused rather than scored,
+because padding the gaps invents a failure and scoring only what arrived
+would make one answer worth 100%.
+
+`completed` is still set whatever the score, and Financial DNA still counts
+`completed` rather than `quiz_score`, so nobody's existing band moved.
+
+The bot's quiz **recorded nothing** before this: tapping through it scored on
+screen and wrote no row, so a bot-only user's `financial_knowledge` band
+could never move while the bot read `count_completed` to display it. The
+scoring and the write now live in `app/api/quiz.py`, which both surfaces
+call, and the bot walks the three questions carrying the question index in the
+callback payload so a stale button answers the question it was asking.
+
+### Phase 5 — BLOCKED
+
+Account deletion and data export. The prerequisite is unchanged: **the
+applicable jurisdiction and retention requirements are UNKNOWN** and must be
+established by the owner. Do not infer them. `users_repo.delete` already
+cascades correctly, so the mechanism exists; what is missing is what "delete"
+has to mean. The access log now holds user ids, so retention covers logs as
+well as tables.
 
 ---
 
@@ -207,6 +253,16 @@ reopens it.
     default (500 per user) is far above anything the product can reach, and the
     newest runs are never removed. Deleting a user's own saved runs is an
     owner decision; the number is a setting.
+11. **A derived `income_type` is shown, never written.** Recorded income
+    gives a steadiness signal, and the user's declared value stays theirs.
+    Nothing reads `income_type` today, so writing a derived value would have
+    no effect; the moment something does, a silent derivation would move
+    every existing user's figures without them asking. An observation they
+    can act on is better than a score that changed by itself.
+12. **A quiz is a comprehension check, not an exam.** Three questions now,
+    and `completed` is still set whatever the score. Financial DNA counts
+    completion rather than the score, which is also what kept the richer
+    quiz from moving anybody's existing band.
 
 ---
 
@@ -262,6 +318,14 @@ Kept because they are expensive to rediscover, not as a record of what happened.
    test. Found by driving a real API against a real database instead.
    `test_architecture_guards.py::test_every_write_route_owns_its_transaction`
    now walks the route modules and fails on a writing method with no commit.
+7. **The limiter's window is fixed, not rolling.**
+   `limits._LocalCounter.hit` buckets by `int(time.time() // 60)`, a
+   wall-clock minute. Any test that counts requests up to a limit therefore
+   fails whenever it happens to straddle a `:00` — rare per run, certain over
+   enough runs. Pin the clock in such a test (`tests/api/test_telegram_link.py`
+   has the fixture) rather than trusting a fast loop to stay inside one
+   window. Found exactly as lesson 2 predicts: green alone, green in its own
+   file, red once in a full run.
 
 ---
 
