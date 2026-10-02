@@ -46,3 +46,34 @@ class PasswordReset(Base, TimestampMixin):
     )
 
     user: Mapped[User] = relationship(back_populates="password_resets")
+
+
+class TelegramLink(Base, TimestampMixin):
+    """One outstanding "connect my Telegram account" code.
+
+    Same shape as `PasswordReset` and for the same reasons: a bearer credential
+    stored as a hash, single use, with `used_at` rather than deletion so that a
+    second attempt is refused instead of being read as "no such code".
+
+    It is a weaker credential than a reset token and deliberately so. A reset
+    token is 32 random bytes because it arrives by email and nobody types it; a
+    link code is read off one screen and typed into another, so it is twelve
+    characters from an unambiguous alphabet — about 59 bits. That is far too
+    much to guess online against the limiter, and it is *not* enough to shrug
+    at if the table leaks, which is why the TTL is minutes rather than an hour.
+    """
+
+    __tablename__ = "telegram_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    #: sha256 of the normalised code (upper case, no separators).
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    user: Mapped[User] = relationship(back_populates="telegram_links")

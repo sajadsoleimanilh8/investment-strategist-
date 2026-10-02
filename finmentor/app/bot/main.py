@@ -26,6 +26,7 @@ COMMANDS = (
     ("watchlist", handlers.watchlist),
     ("learn", handlers.learn),
     ("ask", handlers.ask),
+    ("link", handlers.link),
 )
 
 

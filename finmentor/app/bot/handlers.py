@@ -21,9 +21,10 @@ from telegram.ext import ContextTypes
 from app.ai import intent as intent_parser
 from app.ai.intent import parse_amount
 from app.api import ask as ask_pipeline
+from app.api import telegram_link as link_pipeline
 from app.api.deps import load_twin
 from app.bot import keyboards, messages, views
-from app.bot.context import is_onboarded, resolve_user_id, session
+from app.bot.context import USER_ID_KEY, is_onboarded, resolve_user_id, session
 from app.core.logging import redact
 from app.repositories import education as education_repo
 from app.repositories import goals as goals_repo
@@ -221,7 +222,49 @@ def _ask_payload(user_id: int, question: str) -> str:
 
 # --- commands -----------------------------------------------------------
 
+#: What a deep link's payload looks like: `?start=link_ABCDEFGHJKMN`.
+DEEP_LINK_PREFIX = "link_"
+
+
+def _redeem(code: str, telegram_id: int) -> tuple[bool, str]:
+    """`(linked, message)`. Runs in a worker thread, so it owns its session."""
+    with session() as db:
+        try:
+            _, report = link_pipeline.redeem(db, code=code, telegram_id=telegram_id)
+        except link_pipeline.LinkRefused as refused:
+            return False, refused.message
+        return True, views.link_result_view(report)
+
+
+async def _run_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE, code: str) -> None:
+    linked, text = await asyncio.to_thread(
+        _redeem, code, update.effective_user.id)
+    if linked and ctx.user_data is not None:
+        # The cached id belonged to the row the merge just deleted. Resolving
+        # again would heal it anyway (`resolve_user_id` checks the row still
+        # exists), but leaving a known-dead id in the cache to be repaired
+        # later is a trap for the next handler that reads it directly.
+        ctx.user_data.pop(USER_ID_KEY, None)
+    await _reply(update, text, keyboards.main_menu() if linked else None)
+
+
+async def link(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """`/link CODE`, or `/link` on its own to be told where to get one."""
+    code = " ".join(ctx.args or []).strip()
+    if not code:
+        await _reply(update, messages.LINK_HOW)
+        return
+    await _run_link(update, ctx, code)
+
+
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    # A deep link is still a /start, so this has to run before the menu: the
+    # user tapped "connect" on a web page and is not expecting onboarding.
+    payload = (ctx.args or [None])[0] or ""
+    if payload.startswith(DEEP_LINK_PREFIX):
+        await _run_link(update, ctx, payload[len(DEEP_LINK_PREFIX):])
+        return
+
     user_id = await _needs_profile(update, ctx)
     if user_id is None:
         await _reply(update, messages.WELCOME)

@@ -9,6 +9,7 @@ Telegram messages, not essays: short blocks, one idea per line.
 from __future__ import annotations
 
 from app.ai.safety import FINANCE_DISCLAIMER
+from app.bot import messages
 from app.bot.formatting import compact, money, number, percent
 from app.schemas.finance import FinancialTwinOut, GoalOut
 from app.schemas.health import FinancialDNAOut, HealthScoreOut
@@ -285,8 +286,42 @@ def help_view() -> str:
             "/market — your watchlist, ranked\n"
             "/watchlist — add or remove symbols\n"
             "/learn — 12 short lessons\n"
-            "/ask — ask me anything about your numbers"
+            "/ask — ask me anything about your numbers\n"
+            "/link — connect this chat to your web account"
         ),
         "Every figure I show is calculated from your data, not guessed. "
         "I explain; I never tell you what to buy or sell.",
     )
+
+
+def link_result_view(report) -> str:
+    """What the merge did, in the user's terms rather than the schema's.
+
+    Silent when there was nothing to merge, which is the common case: most
+    people link a bot account they have only said /start to. A line per
+    category only appears when there was something in it.
+    """
+    lines = ["*Connected*", messages.LINK_DONE]
+
+    if report.moved:
+        lines.append("Brought over from this chat: " + _inventory(report.moved) + ".")
+    if report.kept:
+        lines.append(
+            "Your web account already had " + _inventory(report.kept)
+            + ", so I kept that version."
+        )
+    return _join(*lines)
+
+
+def _inventory(counts: dict[str, int]) -> str:
+    """`3 goals, 2 income records and 1 profile` — a list a person would say.
+
+    The labels in `account_link.MERGED` are singular, so the plural is added
+    here rather than being baked into a constant that is also used as a dict
+    key. A label that is already plural would read as "1 goals".
+    """
+    parts = [f"{count} {label}" if count == 1 else f"{count} {label}s"
+             for label, count in counts.items()]
+    if len(parts) == 1:
+        return parts[0]
+    return ", ".join(parts[:-1]) + " and " + parts[-1]

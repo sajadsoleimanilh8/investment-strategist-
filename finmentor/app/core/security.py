@@ -204,6 +204,61 @@ def hash_reset_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+# --- telegram link codes -------------------------------------------------
+
+#: No `0`/`O`, `1`/`I`/`L`, `U`/`V`. A reset token is read by a machine out of
+#: a URL; this one is read off a screen by a person and typed into a phone, and
+#: the characters people reliably confuse are worth more than the two bits they
+#: cost. Thirty symbols, twelve of them, is about 59 bits.
+LINK_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTWXYZ"
+LINK_CODE_LENGTH = 12
+#: Where the hyphens go when the code is shown. Display only: `normalise_link_code`
+#: strips them, so a user who types the groups without them is not punished.
+LINK_CODE_GROUP = 4
+
+
+def new_link_code() -> tuple[str, str]:
+    """A link code and the hash to store: `(formatted, hashed)`.
+
+    The formatted value is what the user sees and what a deep link carries.
+    The hash is taken from the normalised form, so the two never disagree
+    about whether the hyphens count.
+    """
+    raw = "".join(secrets.choice(LINK_CODE_ALPHABET) for _ in range(LINK_CODE_LENGTH))
+    return format_link_code(raw), hash_link_code(raw)
+
+
+def format_link_code(code: str) -> str:
+    """`ABCD-EFGH-JKMN`. Grouping is for the eye, not for the protocol."""
+    bare = normalise_link_code(code)
+    return "-".join(bare[i:i + LINK_CODE_GROUP]
+                    for i in range(0, len(bare), LINK_CODE_GROUP))
+
+
+def normalise_link_code(code: str) -> str:
+    """Upper case, no separators, no surrounding space.
+
+    Everything a person might plausibly do to a code between reading it and
+    sending it is undone here: lower case, the hyphens kept or dropped, a
+    space instead of a hyphen, a trailing newline from a paste. What is *not*
+    undone is a mistyped character, because `O` for `0` cannot be corrected
+    without guessing, which is why neither is in the alphabet.
+    """
+    return "".join(ch for ch in (code or "").upper() if ch in LINK_CODE_ALPHABET)
+
+
+def hash_link_code(code: str) -> str:
+    """SHA-256 of the normalised code.
+
+    Same algorithm as the reset token and a weaker guarantee, stated plainly:
+    59 bits of entropy behind a fast hash is crackable offline given the
+    table. The defences that matter here are the minutes-long TTL, single use,
+    and the limiter on redemption. Hashing protects against the table being
+    read, not against a determined offline attack on a live code.
+    """
+    return hashlib.sha256(normalise_link_code(code).encode("utf-8")).hexdigest()
+
+
 def bearer_token(authorization: str | None) -> str:
     """The token out of an `Authorization: Bearer <token>` header."""
     if not authorization:

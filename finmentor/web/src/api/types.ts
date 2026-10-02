@@ -202,3 +202,17 @@ export interface AskResponse {
   used_context: Record<string, unknown>;
   disclaimer_applied: boolean;
 }
+
+export interface TelegramStatus {
+  linked: boolean;
+  telegram_id: number | null;
+}
+
+export interface LinkCode {
+  /** Grouped for reading: ABCD-EFGH-JKMN. The bot accepts it either way. */
+  code: string;
+  expires_at: string;
+  ttl_minutes: number;
+  /** Null when the deployment has not been told the bot's username. */
+  deep_link: string | null;
+}

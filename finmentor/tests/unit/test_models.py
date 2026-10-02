@@ -30,7 +30,7 @@ def test_all_tables_are_registered():
         "users", "financial_profiles", "income_records", "expense_records",
         "financial_goals", "market_assets", "market_snapshots", "watchlists",
         "simulations", "chat_sessions", "education_progress",
-        "password_resets", "user_identities",
+        "password_resets", "user_identities", "telegram_links",
     }
 
 

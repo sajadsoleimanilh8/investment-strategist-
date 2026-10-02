@@ -13,6 +13,7 @@ import { getProfile, saveProfile } from "../api/profile";
 import { AsyncBoundary, messageFor } from "../components/AsyncBoundary";
 import { Field } from "../components/Field";
 import { FormError } from "../components/FormError";
+import { TelegramLink } from "../components/TelegramLink";
 import { EXPENSE_CATEGORIES, type ExpenseBreakdown } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 
@@ -260,6 +261,9 @@ export function Profile() {
           </form>
         )}
       </AsyncBoundary>
+
+      <hr />
+      <TelegramLink />
     </section>
   );
 }

@@ -310,3 +310,77 @@ def test_nothing_below_delivery_imports_the_bot():
             if [n for n in imported_modules(path) if n.startswith("app.bot")]:
                 importers.append(path.relative_to(APP).as_posix())
     assert importers == [], f"the bot leaked downwards: {importers}"
+
+
+# --- transactions --------------------------------------------------------
+#
+# `get_db` yields a session and closes it. It does not commit. That makes
+# committing an obligation of every route that writes, and nothing enforced
+# it: `POST /api/me/telegram/code` shipped without one and the symptom was
+# not an error but a code that had already been rolled back by the time the
+# user typed it. The suite could not see it either, because the `db` fixture
+# hands the same uncommitted session to the app and to the assertions.
+
+ROUTES = APP / "api" / "routes"
+WRITE_METHODS = {"post", "put", "delete", "patch"}
+
+#: Write-shaped handlers that correctly do not commit, with the reason. A
+#: route belongs here only if it writes nothing to the database, or if it
+#: delegates to something that owns the transaction itself.
+NO_COMMIT_NEEDED = {
+    "ask": "app/api/ask.py commits inside the pipeline",
+    "refresh": "reads a refresh token and mints a pair; writes nothing",
+    "exchange": "burns a jti in Redis; touches no table",
+}
+
+
+def write_handlers():
+    """`(module, function, source)` for every handler on a writing method."""
+    found = []
+    for path in sorted(ROUTES.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            methods = {
+                decorator.func.attr for decorator in node.decorator_list
+                if isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr in WRITE_METHODS
+            }
+            if methods:
+                found.append((path.name, node.name,
+                              ast.get_source_segment(source, node) or ""))
+    return found
+
+
+def test_the_session_dependency_still_does_not_commit():
+    """The premise of the guard below. If this changes, that one is noise."""
+    source = (APP / "db" / "session.py").read_text(encoding="utf-8")
+    body = source[source.index("def get_db"):]
+    assert ".commit()" not in body, (
+        "get_db now commits; the per-route obligation below is obsolete"
+    )
+
+
+@pytest.mark.parametrize("module, name, source", [
+    pytest.param(module, name, source, id=f"{module}::{name}")
+    for module, name, source in write_handlers()
+])
+def test_every_write_route_owns_its_transaction(module, name, source):
+    if name in NO_COMMIT_NEEDED:
+        pytest.skip(NO_COMMIT_NEEDED[name])
+    assert ".commit()" in source, (
+        f"{module}::{name} writes on a method that implies a write and never "
+        "commits. `get_db` does not commit for you. If this route really "
+        "writes nothing, add it to NO_COMMIT_NEEDED with the reason."
+    )
+
+
+def test_the_exception_list_names_only_real_handlers():
+    """A stale entry would silently excuse a route that was renamed into it."""
+    handlers = {name for _, name, _ in write_handlers()}
+    assert set(NO_COMMIT_NEEDED) <= handlers, (
+        f"NO_COMMIT_NEEDED names handlers that no longer exist: "
+        f"{sorted(set(NO_COMMIT_NEEDED) - handlers)}"
+    )

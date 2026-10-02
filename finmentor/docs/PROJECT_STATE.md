@@ -17,7 +17,7 @@ exist and remain authoritative for their own purposes:
 Git holds the history. This file holds only what a fresh reader needs in order
 to act correctly today.
 
-Last updated against commit `658782a` plus the code-quality pass
+Last updated against commit `9765c89` plus Telegram account linking
 (uncommitted at time of writing).
 
 ---
@@ -132,14 +132,41 @@ claiming crypto tickers, the stale transcript list, a confirmation before
 removing a watchlist symbol, mobile navigation, two dead components, the
 README's test counts, and `100vh` on the app shell.
 
-### Phase 5 — PLANNED
+### Phase 5 — IN PROGRESS
 
-Account deletion, data export, Telegram-to-web account linking, expense
-history, income history, real quizzes, structured observability.
+Seven items. One done, two blocked on the owner, four open.
 
-Account deletion and export have a prerequisite: **the applicable jurisdiction
-and retention requirements are UNKNOWN** and must be established by the owner
-before implementation. Do not infer them.
+**Telegram-to-web account linking — DONE.** `users` had carried
+`telegram_id` and `email` on one row since the initial schema, with a comment
+saying the two would hold both "once the two identities are linked". Nothing
+linked them.
+
+A code is issued to an authenticated browser (`POST /api/me/telegram/code`)
+and redeemed inside Telegram, by `/link CODE` or by a deep link that saves the
+typing. It is twelve characters from an alphabet with no `O`/`0`, `I`/`1`/`L`
+or `U`/`V`, stored as a SHA-256 hash, single use, retired when another is
+issued, and good for ten minutes. That is about 59 bits — far too much to
+guess against the limiter and not enough to shrug at if the table leaks,
+which is why the TTL is minutes rather than the hour a reset link gets.
+
+Linking is a **merge**, because the normal case is someone who used the bot
+first and signed up later, so the data they care about is on the bot side. The
+rule is one sentence: *the web account wins every collision; everything that
+does not collide moves across.* A collision is not a matter of taste, it is
+exactly the per-user unique constraints, and `account_link.MERGED` lists them
+per table. `tests/unit/test_account_link.py` asserts each one against the
+schema and walks the mapper registry so a table added later cannot be
+forgotten — forgetting would lose its rows silently, with no error.
+
+A Telegram account already attached to another *web* account is refused
+rather than merged: that would have to pick which email survives.
+
+Account deletion and export still have a prerequisite: **the applicable
+jurisdiction and retention requirements are UNKNOWN** and must be established
+by the owner before implementation. Do not infer them.
+
+Still open: expense history, income history, real quizzes (the current ones
+are one question per topic by design), structured observability.
 
 ---
 
@@ -226,12 +253,22 @@ Kept because they are expensive to rediscover, not as a record of what happened.
    `load_twin` reads the *current* period and so saw no expenses at all. Any
    fixture date compared against today should be derived from today.
 
+6. **`get_db` does not commit, so every write route must.** Obvious once
+   stated, and `POST /api/me/telegram/code` shipped without it during this
+   phase: the user was handed a code that had already been rolled back, and
+   every redemption said "that code is not valid". The suite could not see it
+   because the `db` fixture gives the app and the assertions *the same
+   uncommitted session*, so a missing commit is invisible to almost every API
+   test. Found by driving a real API against a real database instead.
+   `test_architecture_guards.py::test_every_write_route_owns_its_transaction`
+   now walks the route modules and fails on a writing method with no commit.
+
 ---
 
 ## Blockers
 
 - **The pull request is not open.** Branch
-  `fix/phase-1-2-security-and-product-defects` is pushed (`4da8b68`); the `gh`
+  `fix/phase-1-2-security-and-product-defects` is pushed (`9765c89`); the `gh`
   CLI is not installed on this machine. Open it from
   `https://github.com/sajadsoleimanilh8/investment-strategist-/compare/main...fix/phase-1-2-security-and-product-defects`
   or install `gh`.

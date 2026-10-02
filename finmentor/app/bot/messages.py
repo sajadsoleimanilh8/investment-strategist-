@@ -70,3 +70,19 @@ WHATIF_PROMPT = (
 PURCHASE_PROMPT = "How much does it cost? I'll show you what it does to your numbers."
 UNREADABLE_AMOUNT = "I couldn't read an amount there. Try something like 60m."
 NO_GOALS_YET = "You have no goals yet — add one from the Goals menu."
+
+# --- account linking ----------------------------------------------------
+#
+# A code is a credential, so none of this copy ever repeats one back: a
+# refusal says the code was refused, never which code, because the reply sits
+# in a chat log that outlives the ten minutes the code was good for.
+
+LINK_HOW = (
+    "To connect this chat to your FinMentor account on the web:\n\n"
+    "1. Sign in at the website.\n"
+    "2. Open Profile, then Connect Telegram.\n"
+    "3. Send me the code you see, like this: /link ABCD-EFGH-JKMN\n\n"
+    "The code is good for a few minutes and works once."
+)
+LINK_DONE = "Connected. This chat and your web account are now the same account."
+LINK_ALREADY_YOURS = "This chat is already connected to that account. Nothing to do."

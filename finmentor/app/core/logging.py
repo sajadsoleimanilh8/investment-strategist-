@@ -49,6 +49,19 @@ _LABELLED_SECRET = re.compile(
     r"\b(bearer|token|api[_-]?key)(\s*[:=]\s*|\s+)(\S+)", re.IGNORECASE
 )
 _TELEGRAM_TOKEN = re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{30,}\b")
+#: A Telegram link code, in either form it travels in: `ABCD-EFGH-JKMN` off a
+#: web page, or `link_ABCDEFGHJKMN` inside a deep link. Unlike the two above
+#: it is not labelled, so nothing key-driven would ever find it.
+#:
+#: No code reaches a log through this codebase: the refusals in
+#: `app/api/telegram_link.py` never repeat the code back, which is the actual
+#: control. This is the second line, for the paths that are not ours -- PTB
+#: logging an update, or a driver quoting the parameters of a failed
+#: statement. The alphabet is `LINK_CODE_ALPHABET`, narrow enough that a false
+#: positive has to be twelve characters of exactly those symbols.
+_LINK_CODE = re.compile(
+    r"\b(?:link_)?[2-9A-HJ-NP-TW-Z]{4}-?[2-9A-HJ-NP-TW-Z]{4}-?[2-9A-HJ-NP-TW-Z]{4}\b"
+)
 
 
 def scrub_text(text: str) -> str:
@@ -60,7 +73,8 @@ def scrub_text(text: str) -> str:
     """
     text = _DSN_CREDENTIALS.sub(rf"\1:{SECRET_MASK}", text)
     text = _LABELLED_SECRET.sub(rf"\1\2{SECRET_MASK}", text)
-    return _TELEGRAM_TOKEN.sub(SECRET_MASK, text)
+    text = _TELEGRAM_TOKEN.sub(SECRET_MASK, text)
+    return _LINK_CODE.sub(SECRET_MASK, text)
 
 
 def configure_logging() -> None:

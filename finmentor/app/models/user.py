@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from app.models.auth import PasswordReset
+    from app.models.auth import PasswordReset, TelegramLink
     from app.models.identity import UserIdentity
     from app.models.finance import ExpenseRecord, FinancialProfile, IncomeRecord
     from app.models.goal import FinancialGoal
@@ -81,6 +81,9 @@ class User(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     password_resets: Mapped[list[PasswordReset]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    telegram_links: Mapped[list[TelegramLink]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     identities: Mapped[list[UserIdentity]] = relationship(

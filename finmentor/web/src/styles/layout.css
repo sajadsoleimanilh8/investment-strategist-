@@ -846,3 +846,46 @@ ul.chips button { font-size: 0.875rem; }
 .disclaimer { font-size: 0.8125rem; }
 [role="alert"] { color: var(--color-negative); }
 [role="status"] { color: var(--color-positive); }
+
+/* --- telegram link panel ----------------------------------------------
+ *
+ * The code is the one piece of text on the site a user has to transcribe by
+ * eye, so it gets the monospace face, loose tracking and a size that survives
+ * being read off a laptop while holding a phone. `user-select: all` makes one
+ * click take the whole code instead of one group of four.
+ */
+.link-code {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 1.375rem;
+  letter-spacing: 0.12em;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  user-select: all;
+}
+
+.link-steps { margin: 0; padding-inline-start: var(--space-4); }
+.link-steps li { margin-block: var(--space-1); }
+.link-steps code { font-family: var(--font-mono); word-break: break-all; }
+
+/* An anchor that has to sit in a row of buttons and not look like a stranger.
+ * It stays an anchor because it navigates (to Telegram), and a button that
+ * navigates is a link wearing a costume that keyboard and middle-click users
+ * pay for. */
+.button-link {
+  display: inline-block;
+  background: var(--color-bg);
+  color: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: var(--shadow-glow);
+}
+
+.button-link:hover { border-color: var(--color-mist); text-decoration: none; }

@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     #: Short on purpose: a reset link is a bearer credential sitting in an
     #: inbox, and an hour is long enough to read an email.
     password_reset_ttl_minutes: int = 60
+    #: Minutes a Telegram link code stays usable. Much shorter than a reset
+    #: link, because a reset arrives in an inbox the user comes back to and
+    #: this is read off a screen they are looking at right now. Ten minutes
+    #: covers "open Telegram, find the bot, paste" without leaving a live
+    #: grant on a laptop somebody else will sit down at.
+    telegram_link_ttl_minutes: int = 10
+    #: Redemption attempts per minute, per Telegram account. The code is 59
+    #: bits, so this is not what makes guessing hopeless; it is what stops a
+    #: single account hammering the endpoint from being free.
+    telegram_link_attempts_per_minute: int = 5
 
     # third-party sign-in --------------------------------------------------
     #: Absent credentials mean the provider is absent from the sign-in page,
@@ -75,6 +85,12 @@ class Settings(BaseSettings):
 
     # telegram
     telegram_bot_token: str = ""
+    #: The bot's @name, without the @. Only used to build the deep link that
+    #: saves a user typing the code. There is no way to derive it from the
+    #: token without calling Telegram, which is a network call the API has no
+    #: other reason to make, so an unset value means the link-code response
+    #: carries the code and no deep link rather than a broken one.
+    telegram_bot_username: str = ""
 
     # market data
     alpha_vantage_api_key: str = "demo"
