@@ -83,19 +83,74 @@ def guard_destructive_target(url: str) -> None:
     )
 
 
+@pytest.fixture(scope="session")
+def _limiter_store():
+    """One Redis client for the whole session, or None.
+
+    Session-scoped on purpose. A client per test costs about a second of
+    connection setup, which across this suite is a quarter of an hour of
+    nothing. Not the limiter's own cached client either: borrowing that would
+    cache a connection built from the current `redis_url`, and a test that
+    points `redis_url` at a dead address to watch the fallback would then get
+    the live one instead.
+    """
+    import redis
+    from redis.exceptions import RedisError
+
+    from app.core.config import settings
+
+    client = redis.Redis.from_url(settings.redis_url, socket_timeout=0.5)
+    try:
+        client.ping()
+    except (RedisError, OSError):
+        # No Redis is the normal case for this suite, and the limiter is
+        # designed to cope. Only connection failures are tolerated: a bare
+        # `except Exception` here swallowed a NameError for a missing import
+        # and silently disabled the clearing below, which looked exactly like
+        # the leak it was meant to fix.
+        client.close()
+        yield None
+        return
+    try:
+        yield client
+    finally:
+        client.close()
+
+
 @pytest.fixture(autouse=True)
-def _reset_rate_limiter():
+def _reset_rate_limiter(_limiter_store):
     """The limiter holds a module-level Redis client and an in-process counter.
 
     Both are deliberate (one connection pool rather than one per request, and
     a fallback that survives Redis being down), and both are state that would
     otherwise carry from one test into the next.
+
+    The counts in Redis are state too. For as long as the suite ran without
+    Redis nothing noticed, because the in-process fallback was the only store
+    and `limits.reset()` clears that. Start Redis and eleven tests fail: a
+    budget spent by one test is still spent for the next one in the same
+    minute.
     """
     from app.core import limits
 
+    def clear_stored_counts() -> None:
+        if _limiter_store is None:
+            return
+        from redis.exceptions import RedisError
+
+        try:
+            keys = list(_limiter_store.scan_iter(
+                match=f"{limits.KEY_PREFIX}*", count=500))
+            if keys:
+                _limiter_store.delete(*keys)
+        except (RedisError, OSError):
+            pass
+
     limits.reset()
+    clear_stored_counts()
     yield
     limits.reset()
+    clear_stored_counts()
 
 
 @pytest.fixture

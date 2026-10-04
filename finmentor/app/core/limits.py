@@ -46,23 +46,42 @@ log = logging.getLogger("finmentor.limits")
 FAIL_CLOSED_BUCKETS = frozenset({"auth"})
 
 _client = None
+#: The `redis_url` the cached client was built from, so `reset` can tell a
+#: changed address from an unchanged one.
+_client_url: str | None = None
 _client_lock = threading.Lock()
 
 
 def _redis():
     """The shared client, built once. None when redis is unusable."""
-    global _client
+    global _client, _client_url
     if _client is not None:
-        return _client
+        if _client_url == settings.redis_url:
+            return _client
+        # The address changed under us. Checked here rather than in `reset`
+        # because a caller can repoint `redis_url` at any moment -- a test
+        # pointing it at a dead address to watch the fallback does exactly
+        # that, after `reset` has already run -- and handing back a client
+        # built for the old address would quietly ignore them.
+        _drop_client()
     with _client_lock:
         if _client is None:
             import redis
 
+            _client_url = settings.redis_url
             _client = redis.Redis.from_url(
-                settings.redis_url, socket_timeout=0.25,
-                socket_connect_timeout=0.25, health_check_interval=30,
+                settings.redis_url,
+                socket_timeout=settings.redis_command_timeout_seconds,
+                socket_connect_timeout=settings.redis_connect_timeout_seconds,
+                health_check_interval=30,
             )
     return _client
+
+
+#: Prefix every counter key shares. Exposed so a test fixture can clear the
+#: counters without reaching for `flushdb` -- this instance also holds the
+#: market cache, which a test has no business dropping.
+KEY_PREFIX = "rl:"
 
 
 def reset() -> None:
@@ -70,17 +89,36 @@ def reset() -> None:
 
     For tests: the client is cached across calls by design, so a suite that
     points `redis_url` somewhere new mid-run would otherwise keep talking to
-    the old one. Cheap enough to call per test.
+    the old one. Cheap enough to call per test, and deliberately **does not
+    connect** -- connecting here would cache a client built from whatever
+    `redis_url` says at reset time, which is exactly what a test that then
+    points `redis_url` at a dead address is trying to avoid.
+
+    Counts already stored in Redis are not this function's business either.
+    `tests/conftest.py` clears those with its own short-lived client, because
+    the key prefix is public and a test fixture is where test isolation
+    belongs.
     """
-    _drop_client()
+    # The client is deliberately *not* dropped here. It used to be, so that a
+    # suite repointing `redis_url` mid-run could not keep talking to the old
+    # address -- but `_redis` now notices a changed address itself, which
+    # covers that case at the moment it matters rather than once per test.
+    #
+    # Dropping it unconditionally was also the source of a real flake: every
+    # test reconnected, and a connect slower than
+    # `redis_connect_timeout_seconds` sends that one call to the in-process
+    # counter while the rest go to Redis. The count splits and a limit lets an
+    # extra request through, which showed up as a different test in
+    # `tests/api/test_rate_limit.py` failing on each run.
     _local.__init__()
 
 
 def _drop_client() -> None:
     """Forget a client that failed, so the next call builds a fresh one."""
-    global _client
+    global _client, _client_url
     with _client_lock:
         _client = None
+        _client_url = None
 
 
 class _LocalCounter:

@@ -33,7 +33,11 @@ def test_settings_load_values_from_the_environment(monkeypatch):
     assert loaded.env == "dev"
     assert loaded.log_level == "INFO"
     assert loaded.database_url.startswith("postgresql+psycopg://")
-    assert loaded.redis_url == "redis://localhost:6379/0"
+    # `127.0.0.1`, not `localhost`: see the comment on `Settings.database_url`.
+    # The literal address is deliberate, and a test that pinned `localhost`
+    # would quietly invite it back.
+    assert loaded.redis_url == "redis://127.0.0.1:6379/0"
+    assert "localhost" not in loaded.database_url
     assert loaded.market_cache_ttl_seconds == 3600
     assert loaded.local_llm_provider == "ollama"
     assert loaded.ollama_host == "http://localhost:11434"

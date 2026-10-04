@@ -86,3 +86,33 @@ LINK_HOW = (
 )
 LINK_DONE = "Connected. This chat and your web account are now the same account."
 LINK_ALREADY_YOURS = "This chat is already connected to that account. Nothing to do."
+
+
+# --- the command list ---------------------------------------------------
+#
+# One table, three consumers: Telegram's own command menu (registered on
+# startup, so typing "/" shows something), `views.help_view`, and a test that
+# checks it against the handler table in `bot/main.py`.
+#
+# It used to be a hand-written block of prose in `help_view` and nothing
+# registered with Telegram at all, so the bot had twelve commands and
+# advertised none of them. Two lists would have drifted the first time one was
+# added; this one cannot.
+#
+# Descriptions are lower case and under about sixty characters, which is what
+# the Telegram client shows without truncating.
+
+COMMAND_HELP: tuple[tuple[str, str], ...] = (
+    ("start", "set up, or reopen the menu"),
+    ("help", "what I can do"),
+    ("profile", "your finances as I have them"),
+    ("health", "your health score and financial DNA"),
+    ("budget", "a suggested split of your income"),
+    ("goals", "track and add goals"),
+    ("simulate", "what-ifs, purchases, the time machine"),
+    ("market", "your watchlist, ranked"),
+    ("watchlist", "add or remove symbols"),
+    ("learn", "twelve short lessons"),
+    ("ask", "ask me anything about your numbers"),
+    ("link", "connect this chat to your web account"),
+)

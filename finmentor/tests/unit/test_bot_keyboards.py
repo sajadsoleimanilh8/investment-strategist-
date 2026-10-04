@@ -159,3 +159,85 @@ def test_quiz_callback_data_fits_telegrams_limit(topic):
     fail at the longest topic key rather than in somebody's chat."""
     for question_idx in range(len(topic["questions"])):
         keyboards.quiz_options(topic["key"], topic, question_idx)
+
+
+# --- the command menu ----------------------------------------------------
+#
+# `messages.COMMAND_HELP` has three consumers: Telegram's own menu, `/help`,
+# and the handler table in `bot/main.py`. Nothing registered the menu before,
+# so the bot had twelve commands and advertised none of them. These keep the
+# table honest now that something depends on it.
+
+def test_every_handler_has_a_description():
+    from app.bot import main, messages
+
+    handled = {name for name, _ in main.COMMANDS}
+    described = {name for name, _ in messages.COMMAND_HELP}
+
+    assert handled - described == set(), (
+        "a command is registered with a handler and has no description, so it "
+        "would appear in Telegram's menu with an empty label"
+    )
+
+
+def test_every_description_has_a_handler():
+    """A menu entry with nothing behind it is worse than no entry.
+
+    `/help` is the exception: it is a `CommandHandler` built from
+    `handlers.help_command` in the same table, so it should be present. If
+    this starts failing for a new name, the name was described and never
+    wired.
+    """
+    from app.bot import main, messages
+
+    handled = {name for name, _ in main.COMMANDS}
+    described = {name for name, _ in messages.COMMAND_HELP}
+
+    assert described - handled == set()
+
+
+def test_descriptions_fit_what_a_telegram_client_shows():
+    from app.bot import messages
+
+    for name, description in messages.COMMAND_HELP:
+        assert description, name
+        assert len(description) <= 60, f"/{name}: {len(description)} characters"
+        assert description == description.strip(), name
+        assert description[0].islower(), f"/{name}: starts upper case"
+
+
+def test_command_names_are_valid_for_telegram():
+    """Lower case, digits and underscores, 1 to 32 characters."""
+    import re
+
+    from app.bot import messages
+
+    for name, _ in messages.COMMAND_HELP:
+        assert re.fullmatch(r"[a-z0-9_]{1,32}", name), name
+
+
+def test_no_command_is_listed_twice():
+    from app.bot import messages
+
+    names = [name for name, _ in messages.COMMAND_HELP]
+    assert len(set(names)) == len(names)
+
+
+def test_the_help_text_lists_every_command():
+    """The help text and the menu are rendered from one table, so this is
+    really asserting that the rendering has not been bypassed."""
+    from app.bot import messages, views
+
+    text = views.help_view()
+    for name, description in messages.COMMAND_HELP:
+        assert f"/{name}" in text
+        assert description in text
+
+
+def test_no_em_dash_in_the_command_copy():
+    """The project bans em-dashes in user-visible copy, and this copy is
+    rendered into a chat and into Telegram's menu."""
+    from app.bot import messages, views
+
+    assert "—" not in views.help_view()
+    assert not [d for _, d in messages.COMMAND_HELP if "—" in d]

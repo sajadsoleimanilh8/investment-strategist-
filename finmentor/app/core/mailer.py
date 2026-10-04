@@ -27,6 +27,7 @@ from email.message import EmailMessage
 from typing import Protocol
 
 from app.core.config import settings
+from app.core.logging import UNSCRUBBED
 
 log = logging.getLogger("finmentor.mail")
 
@@ -55,9 +56,17 @@ class ConsoleMailer:
     name = "console"
 
     def send(self, message: Message) -> None:
+        # `UNSCRUBBED` because the formatter masks credentials in log
+        # output, and the reset link in this body is exactly such a
+        # credential. It is also the only way to finish the flow without a
+        # mail transport, which is this class's whole reason to exist.
+        # `check_production` refuses to start on this transport outside
+        # DEMO_MODE, and that guard is what makes the exemption safe. It is
+        # the only one in the codebase, and a test keeps it that way.
         log.info(
             "email not sent (console transport)\nTo: %s\nSubject: %s\n\n%s",
             message.to, message.subject, message.body,
+            extra={UNSCRUBBED: True},
         )
 
 

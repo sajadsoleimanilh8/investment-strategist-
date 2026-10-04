@@ -82,11 +82,35 @@ class Settings(BaseSettings):
     currency_symbol: str = "$"
 
     # database / cache
-    database_url: str = "postgresql+psycopg://finmentor:finmentor@localhost:5432/finmentor"
-    redis_url: str = "redis://localhost:6379/0"
+    #: `127.0.0.1`, not `localhost`, and it is worth 2 seconds a connection.
+    #:
+    #: `localhost` resolves to `::1` before `127.0.0.1` on Windows, and a
+    #: container that publishes to `127.0.0.1:5432` is not listening on `::1`
+    #: at all. The IPv6 attempt therefore has to time out before the IPv4 one
+    #: is tried: measured at ~2070ms per connect here, against ~2ms for the
+    #: literal address.
+    #:
+    #: That is why the limiter had never once used Redis on this machine --
+    #: its 0.25s connect timeout could not be met, so every call silently took
+    #: the in-process fallback, which is per-process and so not a shared limit
+    #: at all. The only sign was a log line nobody was reading.
+    database_url: str = "postgresql+psycopg://finmentor:finmentor@127.0.0.1:5432/finmentor"
+    redis_url: str = "redis://127.0.0.1:6379/0"
 
     # telegram
     telegram_bot_token: str = ""
+    #: Seconds the bot waits on Telegram for a connect, a read or a write.
+    #:
+    #: PTB's defaults are 5s, which is fine on a datacentre link and not on
+    #: the one this was first run from: `getMe` measured anywhere from 1.6s to
+    #: a TLS handshake timeout, and the bot died at startup with `TimedOut`
+    #: before it had polled once. A long-poll is already slow by design, so a
+    #: generous bound here costs nothing on a healthy link.
+    telegram_timeout_seconds: float = 30.0
+    #: How many times startup retries reaching Telegram before giving up.
+    #: Startup is the one moment a transient failure is fatal: once polling,
+    #: PTB retries on its own.
+    telegram_startup_attempts: int = 5
     #: The bot's @name, without the @. Only used to build the deep link that
     #: saves a user typing the code. There is no way to derive it from the
     #: token without calling Telegram, which is a network call the API has no
@@ -186,6 +210,23 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"]
     )
     #: per-IP on signup/login, per-user on /ai/ask. 0 disables the limiter.
+    #: How long the limiter will wait to *connect* to Redis, and how long it
+    #: will wait for a *command* once connected. Deliberately different
+    #: numbers.
+    #:
+    #: The client is built once and cached, so a connect happens on the first
+    #: request of a process and then essentially never: it can afford a
+    #: realistic bound. A command runs on every limited request, so that one
+    #: stays tight.
+    #:
+    #: Both were 0.25s, and the connect figure was too tight to be reliable
+    #: even against Redis on the same machine -- Docker's port forwarding on
+    #: Windows regularly needs longer. The limiter then falls back to its
+    #: in-process counter, which is per-process and therefore not a shared
+    #: limit at all, and the only sign is a warning. It showed up as
+    #: `tests/api/test_rate_limit.py` failing on a different test each run.
+    redis_connect_timeout_seconds: float = 1.0
+    redis_command_timeout_seconds: float = 0.25
     auth_rate_limit_per_minute: int = 10
     ask_rate_limit_per_minute: int = 20
 

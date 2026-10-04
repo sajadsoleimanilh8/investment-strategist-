@@ -308,24 +308,21 @@ def topics_list_view(topics: list[dict]) -> str:
 # --- misc ---------------------------------------------------------------
 
 def help_view() -> str:
+    """Rendered from `messages.COMMAND_HELP`, which Telegram's menu also uses.
+
+    It was a hand-written block before, which meant the help text and the
+    registered command list were two places to remember and one to forget.
+    """
+    listing = [f"/{name} - {description}"
+               for name, description in messages.COMMAND_HELP]
     return _join(
         "*FinMentor commands*",
-        (
-            "/start — set up or reopen the menu\n"
-            "/profile — your finances as I have them\n"
-            "/health — your health score and DNA\n"
-            "/budget — a suggested split of your income\n"
-            "/goals — track and add goals\n"
-            "/simulate — what-ifs, purchases, the time machine\n"
-            "/market — your watchlist, ranked\n"
-            "/watchlist — add or remove symbols\n"
-            "/learn — 12 short lessons\n"
-            "/ask — ask me anything about your numbers\n"
-            "/link — connect this chat to your web account"
-        ),
+        "\n".join(listing),
         "Every figure I show is calculated from your data, not guessed. "
         "I explain; I never tell you what to buy or sell.",
     )
+
+
 
 
 def link_result_view(report) -> str:

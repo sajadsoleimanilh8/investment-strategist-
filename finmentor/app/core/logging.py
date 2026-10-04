@@ -64,7 +64,18 @@ _DSN_CREDENTIALS = re.compile(r"(?<=://)([^\s:/@]+):([^\s:/@]+)(?=@)")
 _LABELLED_SECRET = re.compile(
     r"\b(bearer|token|api[_-]?key)(\s*[:=]\s*|\s+)(\S+)", re.IGNORECASE
 )
-_TELEGRAM_TOKEN = re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{30,}\b")
+#: A Telegram bot token: a numeric bot id, a colon, then the secret.
+#:
+#: The lookbehind is not decoration. This used to start with `\\b`, which
+#: cannot match the one place a token actually appears -- the API URL,
+#: `https://api.telegram.org/bot<token>/getMe`, where the digits are
+#: preceded by the `t` of "bot" and so have no word boundary before them.
+#: `httpx` logs every request URL at INFO and PTB uses `httpx`, so the
+#: bot wrote its own live credential into the log on every poll, nine
+#: times in fifteen seconds, and the guard that exists to prevent exactly
+#: that never fired. `(?<!\d)` keeps the no-splitting-a-longer-number
+#: property the boundary was there for, without demanding one.
+_TELEGRAM_TOKEN = re.compile(r"(?<!\d)\d{6,}:[A-Za-z0-9_-]{30,}")
 #: A Telegram link code, in either form it travels in: `ABCD-EFGH-JKMN` off a
 #: web page, or `link_ABCDEFGHJKMN` inside a deep link. Unlike the two above
 #: it is not labelled, so nothing key-driven would ever find it.
@@ -129,6 +140,20 @@ _STANDARD_RECORD_ATTRS = frozenset(
 ) | {"message", "asctime", "taskName"}
 
 
+#: A record attribute that exempts one log call from scrubbing.
+#:
+#: Exactly one caller sets it: `app/core/mailer.py`'s `ConsoleMailer`, whose
+#: entire purpose is to emit the email body -- reset link included -- because
+#: without a transport that is the only way to finish the flow offline. The
+#: scrubber would mask the link and make the dev flow impossible, so the
+#: exemption is narrow, explicit at the call site, and asserted to have no
+#: second user by `tests/unit/test_logging_redaction.py`.
+#:
+#: `check_production` already refuses to start on that transport outside
+#: DEMO_MODE, which is what makes this safe rather than a hole.
+UNSCRUBBED = "finmentor_unscrubbed"
+
+
 class JsonFormatter(logging.Formatter):
     """One JSON object per line, for a log that is queried rather than read.
 
@@ -148,15 +173,48 @@ class JsonFormatter(logging.Formatter):
             "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": scrub_text(record.getMessage()),
+            "message": (record.getMessage() if getattr(record, UNSCRUBBED, False)
+                        else scrub_text(record.getMessage())),
             "request_id": getattr(record, "request_id", request_id_var.get()),
         }
         for key, value in record.__dict__.items():
+            if key in (UNSCRUBBED,):
+                continue
             if key not in _STANDARD_RECORD_ATTRS and key != "request_id":
                 payload[key] = redact(value)
         if record.exc_info:
             payload["exception"] = scrub_text(self.formatException(record.exc_info))
         return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+class ScrubbingFormatter(logging.Formatter):
+    """The text formatter, with `scrub_text` over the finished line.
+
+    `JsonFormatter` already scrubbed every field it emitted, and text mode --
+    the default, and what the bot and a local `uvicorn` both use -- scrubbed
+    nothing. So the safer-looking output was the safe one and the ordinary one
+    was not, which is the wrong way round for a default.
+
+    The whole formatted line, not just the message: a credential can arrive
+    through `exc_text` or through an argument, and there is no version of this
+    where it is worth being clever about which.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        if getattr(record, UNSCRUBBED, False):
+            return super().format(record)
+        return scrub_text(super().format(record))
+
+
+#: Loggers that are informative to their own authors and noise here.
+#:
+#: `httpx` is the reason this exists: it logs every request URL at INFO, PTB
+#: makes a request every few seconds, and a Telegram URL carries the bot
+#: token. The scrubber now catches that, but a credential that is never
+#: written down cannot be leaked by a future formatter either, and nobody
+#: wants a line per poll in any case. Raised, not silenced: a failing request
+#: is still worth seeing.
+NOISY_LOGGERS = ("httpx", "httpcore", "telegram.ext.Application", "apscheduler")
 
 
 #: `text` is readable while you are looking at it; `json` is queryable after
@@ -181,10 +239,13 @@ def configure_logging() -> None:
         wanted = "text"
 
     formatter: logging.Formatter = (
-        JsonFormatter() if wanted == "json" else logging.Formatter(TEXT_FORMAT)
+        JsonFormatter() if wanted == "json" else ScrubbingFormatter(TEXT_FORMAT)
     )
 
     install_record_factory()
+
+    for name in NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     root = logging.getLogger()
     if not root.handlers:
