@@ -9,6 +9,26 @@ Work through it on a staging deployment before the first production one.
 
 ---
 
+## 0. The production stack
+
+`docker-compose.prod.yml` is the stack to deploy; `docker-compose.yml` is the
+demo and must not be. The differences are the point:
+
+- Only Caddy publishes ports (80, 443), and it gets the TLS certificates.
+  Postgres, Redis, the API and the web container are internal.
+- Every secret is required: `up` stops with a message rather than starting on an
+  empty one. Redis has a password.
+- `DEMO_MODE=false`, `SEED_DEMO_DATA=false`, `MARKET_LIVE_SOURCE=live`, and the
+  mail transport is SMTP, because the app refuses to start on the console one.
+- The Telegram bot is a service. It used to run only from a developer's shell.
+
+```
+cp .env.production.example .env.production      # fill in every value
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Two DNS names (`APP_DOMAIN`, `API_DOMAIN`) must point at the host before the
+first start, or Caddy cannot obtain certificates.
 ## 1. Secrets
 
 - [ ] **Generate a real `JWT_SECRET`.**

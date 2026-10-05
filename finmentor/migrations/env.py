@@ -16,7 +16,12 @@ config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False`: the default is True, which silences every
+    # logger that already exists -- all of `finmentor.*` -- the moment alembic runs
+    # in a process that has imported the app. The entrypoint runs alembic in its
+    # own process so production never noticed; the Postgres-only migration tests
+    # run it in the test process, and every test after them lost its warnings.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

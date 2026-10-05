@@ -43,3 +43,11 @@ web/node_modules/
 web/dist/
 web/.env
 web/tsconfig.tsbuildinfo
+
+# production secrets and runtime logs. A filled-in .env.production is exactly the
+# file that must never be committed; the bot token reached this repo's public
+# history through committed log files.
+.env.*
+!.env.example
+!.env.production.example
+*.log

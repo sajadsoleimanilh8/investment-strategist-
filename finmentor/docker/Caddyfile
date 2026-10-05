@@ -1,0 +1,14 @@
+# HTTPS for both hostnames. Caddy gets and renews the certificates itself, which
+# needs ports 80 and 443 reachable from the internet and both names in DNS.
+#
+# WebSockets (the live-price feed) pass through reverse_proxy with no extra
+# configuration; `wss://` works because TLS ends here.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8000
+}
